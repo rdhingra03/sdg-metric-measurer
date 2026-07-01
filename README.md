@@ -3,7 +3,7 @@ Automated pipeline for sourcing, organizing, and reporting U.S. SDG metrics usin
 
  SDG Metric Measurer
 
-This repository supports a project to identify, source, organize, and report U.S. Sustainable Development Goal metrics using public datasets.
+This repository supports a project to identify, source, organize, and report United Nations Sustainable Development Goal metrics using public datasets.
 
 ## Project Goals
 
