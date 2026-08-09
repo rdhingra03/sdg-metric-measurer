@@ -28,14 +28,10 @@ import io
 import json
 import os
 import sys
-import tarfile
-import tempfile
-import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass
-from datetime import date
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 from fractions import Fraction
 from pathlib import Path
@@ -43,6 +39,20 @@ from typing import Dict, Iterator, Mapping, Sequence
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from sdg_pipeline.archive import ArchiveReadError, read_nested_zip_member
+from sdg_pipeline.errors import RetrievalError
+from sdg_pipeline.http import (
+    DEFAULT_HTTP_TIMEOUT_SECONDS,
+    PROJECT_USER_AGENT,
+    request_bytes as shared_request_bytes,
+)
+from sdg_pipeline.output import current_retrieval_date, write_csv_outputs_atomically
+
+
 ARCHIVE_PATH = PROJECT_ROOT / "source_materials" / "SDGs.tar"
 CANONICAL_ZIP_MEMBER = "SDGs/sdg-master.zip"
 CANONICAL_DATA_PATH = "sdg-master/data/indicator_4-2-2.csv"
@@ -54,8 +64,8 @@ DEFAULT_START_YEAR = 2018
 DEFAULT_END_YEAR = 2024
 API_FIRST_YEAR = 2000
 API_LAST_YEAR = 2024
-HTTP_TIMEOUT_SECONDS = 180
-USER_AGENT = "sdg-metric-measurer/1.0 (official Census public data client)"
+HTTP_TIMEOUT_SECONDS = DEFAULT_HTTP_TIMEOUT_SECONDS
+USER_AGENT = f"{PROJECT_USER_AGENT} (official Census public data client)"
 
 # CPS person weights in these files have four implied decimal places. Keeping
 # the raw integer weights makes the percentage calculation exact; output counts
@@ -76,10 +86,6 @@ NATIONAL_COLUMNS = [
     "retrieval_date",
 ]
 SEX_COLUMNS = ["year", "sex", *NATIONAL_COLUMNS[1:]]
-
-
-class RetrievalError(RuntimeError):
-    """Raised when an official source cannot provide valid, complete data."""
 
 
 @dataclass(frozen=True)
@@ -229,12 +235,9 @@ def request_bytes(
 ) -> tuple[bytes, str]:
     """Read one HTTP response without exposing an API key in errors."""
 
-    try:
-        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
-            return response.read(), response.headers.get_content_type()
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
-        reason = getattr(error, "reason", error)
-        raise RetrievalError(f"Request failed for {display_url}: {reason}") from error
+    return shared_request_bytes(
+        request, display_url=display_url, timeout=HTTP_TIMEOUT_SECONDS
+    )
 
 
 def parse_integer(value: object, variable: str, year: int) -> int:
@@ -589,16 +592,10 @@ def read_archived_values() -> Dict[tuple[int, str], ArchivedValue]:
     """Read national and sex values directly from sdg-master.zip in SDGs.tar."""
 
     try:
-        with tarfile.open(ARCHIVE_PATH, mode="r:*") as outer_archive:
-            member = outer_archive.getmember(CANONICAL_ZIP_MEMBER)
-            archived_zip = outer_archive.extractfile(member)
-            if archived_zip is None:
-                raise RuntimeError(f"Could not read {CANONICAL_ZIP_MEMBER}")
-            zip_bytes = io.BytesIO(archived_zip.read())
-
-        with zipfile.ZipFile(zip_bytes) as canonical_archive:
-            csv_text = canonical_archive.read(CANONICAL_DATA_PATH).decode("utf-8-sig")
-    except (KeyError, OSError, tarfile.TarError, zipfile.BadZipFile) as error:
+        csv_text = read_nested_zip_member(
+            ARCHIVE_PATH, CANONICAL_ZIP_MEMBER, CANONICAL_DATA_PATH
+        ).decode("utf-8-sig")
+    except (ArchiveReadError, UnicodeDecodeError) as error:
         raise RuntimeError(
             "Could not read the archived canonical SDG 4.2.2 CSV"
         ) from error
@@ -677,60 +674,18 @@ def validate_results(
     }
 
 
-def prepare_temporary_csv(
-    output_path: Path,
-    columns: Sequence[str],
-    rows: Sequence[Mapping[str, object]],
-) -> Path:
-    """Write and fsync a complete temporary CSV beside its final path."""
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="",
-            prefix=f".{output_path.name}.",
-            suffix=".tmp",
-            dir=output_path.parent,
-            delete=False,
-        ) as output_file:
-            temporary_path = Path(output_file.name)
-            writer = csv.DictWriter(output_file, fieldnames=columns)
-            writer.writeheader()
-            writer.writerows(rows)
-            output_file.flush()
-            os.fsync(output_file.fileno())
-        return temporary_path
-    except Exception:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
-        raise
-
-
 def write_outputs_atomically(
     national_rows: Sequence[Mapping[str, object]],
     sex_rows: Sequence[Mapping[str, object]],
 ) -> None:
     """Replace outputs only after both complete temporary files are ready."""
 
-    temporary_paths: list[Path] = []
-    try:
-        national_temp = prepare_temporary_csv(
-            NATIONAL_OUTPUT_PATH, NATIONAL_COLUMNS, national_rows
-        )
-        temporary_paths.append(national_temp)
-        sex_temp = prepare_temporary_csv(SEX_OUTPUT_PATH, SEX_COLUMNS, sex_rows)
-        temporary_paths.append(sex_temp)
-        os.replace(national_temp, NATIONAL_OUTPUT_PATH)
-        temporary_paths.remove(national_temp)
-        os.replace(sex_temp, SEX_OUTPUT_PATH)
-        temporary_paths.remove(sex_temp)
-    finally:
-        for temporary_path in temporary_paths:
-            if temporary_path.exists():
-                temporary_path.unlink()
+    write_csv_outputs_atomically(
+        [
+            (NATIONAL_OUTPUT_PATH, NATIONAL_COLUMNS, national_rows),
+            (SEX_OUTPUT_PATH, SEX_COLUMNS, sex_rows),
+        ]
+    )
 
 
 def print_report(
@@ -806,6 +761,7 @@ def main() -> None:
     arguments = parse_arguments()
     api_key = os.environ.get("CENSUS_API_KEY", "").strip() or None
     try:
+        retrieval_date = current_retrieval_date()
         results = []
         for year in range(arguments.start_year, arguments.end_year + 1):
             records, method, source_url = retrieve_year(year, api_key)
@@ -814,7 +770,7 @@ def main() -> None:
         archived = read_archived_values()
         validation = validate_results(results, archived)
         national_rows, sex_rows = build_output_rows(
-            results, retrieval_date=date.today().isoformat()
+            results, retrieval_date=retrieval_date
         )
         write_outputs_atomically(national_rows, sex_rows)
         print_report(results, validation)

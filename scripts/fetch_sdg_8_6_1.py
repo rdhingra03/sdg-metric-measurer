@@ -22,11 +22,8 @@ import io
 import json
 import os
 import sys
-import tarfile
-import tempfile
 import urllib.error
 import urllib.request
-import zipfile
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -34,6 +31,20 @@ from typing import Dict, Iterable, Mapping, Sequence, Tuple
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from sdg_pipeline.archive import ArchiveReadError, read_nested_zip_member
+from sdg_pipeline.errors import RetrievalError
+from sdg_pipeline.http import (
+    DEFAULT_HTTP_TIMEOUT_SECONDS,
+    PROJECT_USER_AGENT,
+    request_bytes as shared_request_bytes,
+)
+from sdg_pipeline.output import current_retrieval_date, write_csv_atomically
+
+
 ARCHIVE_PATH = PROJECT_ROOT / "source_materials" / "SDGs.tar"
 CANONICAL_ZIP_MEMBER = "SDGs/sdg-master.zip"
 CANONICAL_DATA_PATH = "sdg-master/data/indicator_8-6-1.csv"
@@ -57,8 +68,8 @@ SERIES_IDS = (
 
 FIRST_BLS_YEAR = 1985
 API_YEAR_CHUNK = 10
-HTTP_TIMEOUT_SECONDS = 180
-USER_AGENT = "sdg-metric-measurer/1.0 (official BLS public data client)"
+HTTP_TIMEOUT_SECONDS = DEFAULT_HTTP_TIMEOUT_SECONDS
+USER_AGENT = f"{PROJECT_USER_AGENT} (official BLS public data client)"
 ONE_DECIMAL = Decimal("0.1")
 
 OUTPUT_COLUMNS = [
@@ -72,18 +83,12 @@ OUTPUT_COLUMNS = [
 ]
 
 
-class RetrievalError(RuntimeError):
-    """Raised when an official source cannot provide a complete dataset."""
-
-
 def request_bytes(request: urllib.request.Request) -> Tuple[bytes, str]:
     """Return an HTTP response body and content type with a bounded timeout."""
 
-    try:
-        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
-            return response.read(), response.headers.get_content_type()
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
-        raise RetrievalError(f"Request failed for {request.full_url}: {error}") from error
+    return shared_request_bytes(
+        request, display_url=BLS_API_URL, timeout=HTTP_TIMEOUT_SECONDS
+    )
 
 
 def year_chunks(start_year: int, end_year: int) -> Iterable[Tuple[int, int]]:
@@ -286,11 +291,13 @@ def retrieve_bls_data() -> Tuple[Dict[str, Dict[int, Decimal]], str]:
 
 
 def calculate_rows(
-    observations: Mapping[str, Mapping[int, Decimal]], source_method: str
+    observations: Mapping[str, Mapping[int, Decimal]],
+    source_method: str,
+    retrieval_date: str | None = None,
 ) -> list[Dict[str, object]]:
     """Calculate one audited annual indicator row for every matched year."""
 
-    retrieval_date = date.today().isoformat()
+    retrieval_date = retrieval_date or current_retrieval_date()
     years = sorted(observations[ENROLLED_SERIES])
     rows: list[Dict[str, object]] = []
 
@@ -336,16 +343,10 @@ def read_archived_values() -> Dict[int, Decimal]:
     """Read canonical legacy values directly from sdg-master.zip in SDGs.tar."""
 
     try:
-        with tarfile.open(ARCHIVE_PATH, mode="r:*") as outer_archive:
-            member = outer_archive.getmember(CANONICAL_ZIP_MEMBER)
-            archived_zip = outer_archive.extractfile(member)
-            if archived_zip is None:
-                raise RuntimeError(f"Could not read {CANONICAL_ZIP_MEMBER}")
-            zip_bytes = io.BytesIO(archived_zip.read())
-
-        with zipfile.ZipFile(zip_bytes) as canonical_archive:
-            csv_text = canonical_archive.read(CANONICAL_DATA_PATH).decode("utf-8-sig")
-    except (KeyError, OSError, tarfile.TarError, zipfile.BadZipFile) as error:
+        csv_text = read_nested_zip_member(
+            ARCHIVE_PATH, CANONICAL_ZIP_MEMBER, CANONICAL_DATA_PATH
+        ).decode("utf-8-sig")
+    except (ArchiveReadError, UnicodeDecodeError) as error:
         raise RuntimeError(
             "Could not read the archived canonical SDG 8.6.1 CSV"
         ) from error
@@ -394,28 +395,7 @@ def validate_against_archive(
 def write_output_atomically(rows: Sequence[Mapping[str, object]]) -> None:
     """Replace the output only after retrieval, calculation, and validation succeed."""
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="",
-            prefix=f".{OUTPUT_PATH.name}.",
-            suffix=".tmp",
-            dir=OUTPUT_PATH.parent,
-            delete=False,
-        ) as output_file:
-            temporary_path = Path(output_file.name)
-            writer = csv.DictWriter(output_file, fieldnames=OUTPUT_COLUMNS)
-            writer.writeheader()
-            writer.writerows(rows)
-            output_file.flush()
-            os.fsync(output_file.fileno())
-        os.replace(temporary_path, OUTPUT_PATH)
-    finally:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
+    write_csv_atomically(OUTPUT_PATH, OUTPUT_COLUMNS, rows)
 
 
 def print_report(
@@ -445,8 +425,9 @@ def print_report(
 
 def main() -> None:
     try:
+        retrieval_date = current_retrieval_date()
         observations, source_method = retrieve_bls_data()
-        rows = calculate_rows(observations, source_method)
+        rows = calculate_rows(observations, source_method, retrieval_date)
         archived_values = read_archived_values()
         validation = validate_against_archive(rows, archived_values)
         write_output_atomically(rows)
