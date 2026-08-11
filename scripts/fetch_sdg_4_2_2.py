@@ -22,13 +22,10 @@ Only Python's standard library is required.
 from __future__ import annotations
 
 import argparse
-import csv
-import io
 import os
 import sys
 import urllib.request
-from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP, localcontext
+from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 from typing import Dict, Mapping, Sequence
@@ -39,15 +36,15 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from sdg_pipeline.archive import ArchiveReadError, read_nested_zip_member
 from sdg_pipeline.errors import RetrievalError
+from sdg_pipeline.indicators import indicator_4_2_2 as indicator
 from sdg_pipeline.output import current_retrieval_date, write_csv_outputs_atomically
 from sdg_pipeline.sources import census_cps
 
 
 ARCHIVE_PATH = PROJECT_ROOT / "source_materials" / "SDGs.tar"
-CANONICAL_ZIP_MEMBER = "SDGs/sdg-master.zip"
-CANONICAL_DATA_PATH = "sdg-master/data/indicator_4-2-2.csv"
+CANONICAL_ZIP_MEMBER = indicator.CANONICAL_ZIP_MEMBER
+CANONICAL_DATA_PATH = indicator.CANONICAL_DATA_PATH
 
 NATIONAL_OUTPUT_PATH = PROJECT_ROOT / "data_processed" / "sdg_4_2_2.csv"
 SEX_OUTPUT_PATH = PROJECT_ROOT / "data_processed" / "sdg_4_2_2_by_sex.csv"
@@ -63,7 +60,7 @@ USER_AGENT = census_cps.USER_AGENT
 # the raw integer weights makes the percentage calculation exact; output counts
 # are divided by this scale to show estimated people rather than storage units.
 WEIGHT_SCALE = census_cps.WEIGHT_SCALE
-ORGANIZED_LEARNING_GRADES = range(1, 17)
+ORGANIZED_LEARNING_GRADES = indicator.ORGANIZED_LEARNING_GRADES
 
 NATIONAL_COLUMNS = [
     "year",
@@ -80,47 +77,10 @@ NATIONAL_COLUMNS = [
 SEX_COLUMNS = ["year", "sex", *NATIONAL_COLUMNS[1:]]
 
 
-@dataclass(frozen=True)
-class PersonRecord:
-    """The five CPS fields needed for this indicator."""
-
-    age: int
-    enrollment: int
-    grade: int
-    sex: int
-    raw_weight: int
-
-
-@dataclass(frozen=True)
-class GroupResult:
-    """Weighted and unweighted results for one national or sex group."""
-
-    raw_weighted_numerator: int
-    raw_weighted_denominator: int
-    unweighted_numerator: int
-    unweighted_denominator: int
-    calculated_fraction: Fraction
-
-
-@dataclass(frozen=True)
-class YearResult:
-    """Calculated results and source provenance for one survey year."""
-
-    year: int
-    weight_variable: str
-    source_url: str
-    retrieval_method: str
-    national: GroupResult
-    male: GroupResult
-    female: GroupResult
-
-
-@dataclass(frozen=True)
-class ArchivedValue:
-    """One archived value plus its displayed decimal precision."""
-
-    value: Decimal
-    decimal_places: int
+PersonRecord = indicator.PersonRecord
+GroupResult = indicator.GroupResult
+YearResult = indicator.YearResult
+ArchivedValue = indicator.ArchivedValue
 
 
 FieldPosition = census_cps.FieldPosition
@@ -128,7 +88,7 @@ FixedWidthLayout = census_cps.FixedWidthLayout
 DownloadConfig = census_cps.DownloadConfig
 LAYOUT_2018_2024 = census_cps.LAYOUT_2018_2024
 DOWNLOAD_CONFIGS = census_cps.DOWNLOAD_CONFIGS
-REQUIRED_PERSON_VARIABLES = ("PRTAGE", "PESCH35", "PECHGRDE", "PESEX")
+REQUIRED_PERSON_VARIABLES = indicator.REQUIRED_PERSON_VARIABLES
 
 
 def census_download_url(year: int) -> str:
@@ -170,21 +130,15 @@ def person_from_mapping(
 
     variables = (*REQUIRED_PERSON_VARIABLES, weight_variable)
     observation = census_cps.observation_from_mapping(row, year, variables)
-    return person_from_observation(observation, weight_variable)
+    return indicator.person_from_observation(observation, weight_variable)
 
 
 def person_from_observation(
     observation: census_cps.CpsObservation, weight_variable: str
 ) -> PersonRecord:
-    """Translate named CPS variables without applying indicator calculations."""
+    """Compatibility wrapper for the indicator's CPS field mapping."""
 
-    return PersonRecord(
-        age=observation.value("PRTAGE"),
-        enrollment=observation.value("PESCH35"),
-        grade=observation.value("PECHGRDE"),
-        sex=observation.value("PESEX"),
-        raw_weight=observation.value(weight_variable),
-    )
+    return indicator.person_from_observation(observation, weight_variable)
 
 
 def fetch_from_api(year: int, api_key: str) -> list[PersonRecord]:
@@ -199,10 +153,7 @@ def fetch_from_api(year: int, api_key: str) -> list[PersonRecord]:
         query_filters={"PRTAGE": 5},
         request_executor=request_bytes,
     )
-    return [
-        person_from_observation(observation, weight_variable)
-        for observation in observations
-    ]
+    return indicator.select_age_five(observations, weight_variable)
 
 
 def open_downloaded_records(
@@ -228,7 +179,7 @@ def parse_fixed_width_record(
     )
     if observation is None:
         return None
-    return person_from_observation(observation, weight_variable)
+    return indicator.person_from_observation(observation, weight_variable)
 
 
 def fetch_from_download(year: int) -> tuple[list[PersonRecord], str]:
@@ -245,10 +196,7 @@ def fetch_from_download(year: int) -> tuple[list[PersonRecord], str]:
         records_description="5-year-old records",
     )
     return (
-        [
-            person_from_observation(observation, weight_variable)
-            for observation in observations
-        ],
+        indicator.select_age_five(observations, weight_variable),
         source_url,
     )
 
@@ -277,23 +225,9 @@ def retrieve_year(
 def calculate_group(
     records: Sequence[PersonRecord], label: str, year: int
 ) -> GroupResult:
-    """Calculate one weighted group, requiring a nonempty positive denominator."""
+    """Compatibility wrapper for one weighted indicator group."""
 
-    denominator_records = [record for record in records if record.raw_weight > 0]
-    numerator_records = [
-        record for record in denominator_records if record.enrollment == 1
-    ]
-    raw_denominator = sum(record.raw_weight for record in denominator_records)
-    raw_numerator = sum(record.raw_weight for record in numerator_records)
-    if not denominator_records or raw_denominator <= 0:
-        raise RuntimeError(f"{year} {label} has no valid positive-weight records")
-    return GroupResult(
-        raw_weighted_numerator=raw_numerator,
-        raw_weighted_denominator=raw_denominator,
-        unweighted_numerator=len(numerator_records),
-        unweighted_denominator=len(denominator_records),
-        calculated_fraction=Fraction(100 * raw_numerator, raw_denominator),
-    )
+    return indicator.calculate_group(records, label, year)
 
 
 def calculate_year(
@@ -302,213 +236,69 @@ def calculate_year(
     retrieval_method: str,
     source_url: str,
 ) -> YearResult:
-    """Validate person codes and calculate national, male, and female values."""
+    """Compatibility wrapper for national and sex-disaggregated calculation."""
 
-    if any(record.age != 5 for record in records):
-        raise RuntimeError(f"{year} retrieval included a person who is not age 5")
-
-    invalid_enrollment = sorted(
-        {record.enrollment for record in records if record.enrollment not in {1, 2}}
-    )
-    if invalid_enrollment:
-        raise RuntimeError(
-            f"{year} has invalid PESCH35 codes for age-5 records: "
-            + ", ".join(map(str, invalid_enrollment))
-        )
-
-    invalid_grades = sorted(
-        {
-            record.grade
-            for record in records
-            if record.enrollment == 1
-            and record.grade not in ORGANIZED_LEARNING_GRADES
-        }
-    )
-    if invalid_grades:
-        raise RuntimeError(
-            f"{year} has enrolled age-5 records outside the organized-learning "
-            "grade range: "
-            + ", ".join(map(str, invalid_grades))
-        )
-
-    invalid_sex = sorted({record.sex for record in records if record.sex not in {1, 2}})
-    if invalid_sex:
-        raise RuntimeError(
-            f"{year} has invalid PESEX codes: " + ", ".join(map(str, invalid_sex))
-        )
-
-    male_records = [record for record in records if record.sex == 1]
-    female_records = [record for record in records if record.sex == 2]
-    national = calculate_group(records, "national", year)
-    male = calculate_group(male_records, "male", year)
-    female = calculate_group(female_records, "female", year)
-
-    if (
-        male.raw_weighted_denominator + female.raw_weighted_denominator
-        != national.raw_weighted_denominator
-        or male.raw_weighted_numerator + female.raw_weighted_numerator
-        != national.raw_weighted_numerator
-    ):
-        raise RuntimeError(f"{year} male and female totals do not reconcile nationally")
-
-    return YearResult(
-        year=year,
-        weight_variable=weight_variable_for_year(year),
-        source_url=source_url,
-        retrieval_method=retrieval_method,
-        national=national,
-        male=male,
-        female=female,
+    return indicator.calculate(
+        year,
+        records,
+        retrieval_method,
+        source_url,
+        weight_variable_for_year(year),
     )
 
 
 def fraction_to_decimal(value: Fraction) -> Decimal:
-    """Convert an exact fraction to a high-precision Decimal for output."""
+    """Compatibility wrapper for exact high-precision conversion."""
 
-    with localcontext() as context:
-        context.prec = 50
-        return Decimal(value.numerator) / Decimal(value.denominator)
+    return indicator.fraction_to_decimal(value)
 
 
 def decimal_text(value: Decimal) -> str:
-    """Write ordinary decimal notation, trimming only insignificant zeros."""
+    """Compatibility wrapper for indicator decimal formatting."""
 
-    text = format(value, "f")
-    return text.rstrip("0").rstrip(".") if "." in text else text
+    return indicator.decimal_text(value)
 
 
 def weighted_population_text(raw_weight_sum: int) -> str:
-    """Write a raw four-implied-decimal CPS weight sum as estimated people."""
+    """Compatibility wrapper for implied-decimal CPS weight display."""
 
-    value = Decimal(raw_weight_sum) / Decimal(WEIGHT_SCALE)
-    return format(value, ".4f")
+    return indicator.weighted_population_text(raw_weight_sum, WEIGHT_SCALE)
 
 
 def group_output_fields(group: GroupResult) -> Dict[str, object]:
-    """Return the shared audit columns for one calculated group."""
+    """Compatibility wrapper for indicator audit fields."""
 
-    return {
-        "weighted_numerator": weighted_population_text(
-            group.raw_weighted_numerator
-        ),
-        "weighted_denominator": weighted_population_text(
-            group.raw_weighted_denominator
-        ),
-        "unweighted_numerator": group.unweighted_numerator,
-        "unweighted_denominator": group.unweighted_denominator,
-        "calculated_value": decimal_text(
-            fraction_to_decimal(group.calculated_fraction)
-        ),
-    }
+    return indicator.group_output_fields(group, WEIGHT_SCALE)
 
 
 def build_output_rows(
     results: Sequence[YearResult], retrieval_date: str
 ) -> tuple[list[Dict[str, object]], list[Dict[str, object]]]:
-    """Build national and sex-disaggregated output rows."""
+    """Compatibility wrapper for existing processed output rows."""
 
-    national_rows: list[Dict[str, object]] = []
-    sex_rows: list[Dict[str, object]] = []
-    for result in results:
-        shared = {
-            "year": result.year,
-            "weight_variable": result.weight_variable,
-            "source_url": result.source_url,
-            "retrieval_method": result.retrieval_method,
-            "retrieval_date": retrieval_date,
-        }
-        national_rows.append({**shared, **group_output_fields(result.national)})
-        for sex, group in (("Male", result.male), ("Female", result.female)):
-            sex_rows.append(
-                {**shared, "sex": sex, **group_output_fields(group)}
-            )
-    return national_rows, sex_rows
+    return indicator.build_output_rows(results, retrieval_date, WEIGHT_SCALE)
 
 
 def read_archived_values() -> Dict[tuple[int, str], ArchivedValue]:
-    """Read national and sex values directly from sdg-master.zip in SDGs.tar."""
+    """Compatibility wrapper for indicator-specific archive interpretation."""
 
-    try:
-        csv_text = read_nested_zip_member(
-            ARCHIVE_PATH, CANONICAL_ZIP_MEMBER, CANONICAL_DATA_PATH
-        ).decode("utf-8-sig")
-    except (ArchiveReadError, UnicodeDecodeError) as error:
-        raise RuntimeError(
-            "Could not read the archived canonical SDG 4.2.2 CSV"
-        ) from error
-
-    archived: Dict[tuple[int, str], ArchivedValue] = {}
-    for row in csv.DictReader(io.StringIO(csv_text, newline="")):
-        if (row.get("Income") or "").strip():
-            continue
-        sex = (row.get("Sex") or "").strip() or "National"
-        if sex not in {"National", "Male", "Female"}:
-            continue
-        value_text = (row.get("Value") or "").strip()
-        try:
-            year = int(row["Year"])
-            value = Decimal(value_text)
-        except (KeyError, ValueError, ArithmeticError) as error:
-            raise RuntimeError(f"Invalid archived SDG row: {row}") from error
-        decimal_places = len(value_text.partition(".")[2]) if "." in value_text else 0
-        key = (year, sex)
-        if key in archived:
-            raise RuntimeError(f"Duplicate archived SDG row: {year} {sex}")
-        archived[key] = ArchivedValue(value, decimal_places)
-    return archived
+    return indicator.read_archived_values(ARCHIVE_PATH)
 
 
 def compare_at_archived_precision(
     calculated: Fraction, archived: ArchivedValue
 ) -> Decimal:
-    """Return absolute difference after matching the archive's stored precision."""
+    """Compatibility wrapper for stored-precision comparison."""
 
-    quantizer = Decimal(1).scaleb(-archived.decimal_places)
-    rounded = fraction_to_decimal(calculated).quantize(
-        quantizer, rounding=ROUND_HALF_UP
-    )
-    return abs(rounded - archived.value)
+    return indicator.compare_at_archived_precision(calculated, archived)
 
 
 def validate_results(
     results: Sequence[YearResult], archived: Mapping[tuple[int, str], ArchivedValue]
 ) -> Dict[str, object]:
-    """Validate every available national and sex result against the archive."""
+    """Compatibility wrapper for indicator-specific archive validation."""
 
-    national_differences: Dict[int, Decimal] = {}
-    sex_differences: Dict[tuple[int, str], Decimal] = {}
-    for result in results:
-        national_key = (result.year, "National")
-        if national_key in archived:
-            national_differences[result.year] = compare_at_archived_precision(
-                result.national.calculated_fraction, archived[national_key]
-            )
-        for sex, group in (("Male", result.male), ("Female", result.female)):
-            key = (result.year, sex)
-            if key in archived:
-                sex_differences[key] = compare_at_archived_precision(
-                    group.calculated_fraction, archived[key]
-                )
-
-    if not national_differences:
-        raise RuntimeError("No overlapping national years exist for archive validation")
-
-    national_mismatches = [
-        year for year, difference in national_differences.items() if difference != 0
-    ]
-    sex_mismatches = [
-        key for key, difference in sex_differences.items() if difference != 0
-    ]
-    return {
-        "national_overlaps": len(national_differences),
-        "national_exact_matches": len(national_differences) - len(national_mismatches),
-        "national_maximum_difference": max(national_differences.values()),
-        "national_mismatches": national_mismatches,
-        "sex_overlaps": len(sex_differences),
-        "sex_exact_matches": len(sex_differences) - len(sex_mismatches),
-        "sex_maximum_difference": max(sex_differences.values(), default=Decimal(0)),
-        "sex_mismatches": sex_mismatches,
-    }
+    return indicator.validate_against_archive(results, archived)
 
 
 def write_outputs_atomically(
@@ -576,10 +366,7 @@ def print_report(
         )
     )
     if 2020 in years:
-        print(
-            "Warning: Census notes that pandemic-era response and enrollment "
-            "classification issues may affect the 2020 estimate."
-        )
+        print(f"Warning: {indicator.PANDEMIC_WARNING}")
 
 
 def parse_arguments() -> argparse.Namespace:

@@ -17,13 +17,11 @@ Only Python's standard library is required.
 
 from __future__ import annotations
 
-import csv
-import io
 import os
 import sys
 import urllib.request
 from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from pathlib import Path
 from typing import Dict, Mapping, Sequence, Tuple
 
@@ -33,34 +31,30 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from sdg_pipeline.archive import ArchiveReadError, read_nested_zip_member
 from sdg_pipeline.errors import RetrievalError
+from sdg_pipeline.indicators import indicator_8_6_1 as indicator
 from sdg_pipeline.output import current_retrieval_date, write_csv_atomically
 from sdg_pipeline.sources import bls
 
 
 ARCHIVE_PATH = PROJECT_ROOT / "source_materials" / "SDGs.tar"
-CANONICAL_ZIP_MEMBER = "SDGs/sdg-master.zip"
-CANONICAL_DATA_PATH = "sdg-master/data/indicator_8-6-1.csv"
+CANONICAL_ZIP_MEMBER = indicator.CANONICAL_ZIP_MEMBER
+CANONICAL_DATA_PATH = indicator.CANONICAL_DATA_PATH
 OUTPUT_PATH = PROJECT_ROOT / "data_processed" / "sdg_8_6_1.csv"
 
 BLS_API_URL = bls.BLS_API_URL
 BLS_BULK_DATA_URL = bls.BLS_BULK_DATA_URL
 
-ENROLLED_SERIES = "LNU00022967"
-NOT_ENROLLED_SERIES = "LNU00023016"
-EMPLOYED_NOT_ENROLLED_SERIES = "LNU02023016"
-SERIES_IDS = (
-    ENROLLED_SERIES,
-    NOT_ENROLLED_SERIES,
-    EMPLOYED_NOT_ENROLLED_SERIES,
-)
+ENROLLED_SERIES = indicator.ENROLLED_SERIES
+NOT_ENROLLED_SERIES = indicator.NOT_ENROLLED_SERIES
+EMPLOYED_NOT_ENROLLED_SERIES = indicator.EMPLOYED_NOT_ENROLLED_SERIES
+SERIES_IDS = indicator.SERIES_IDS
 
-FIRST_BLS_YEAR = 1985
+FIRST_BLS_YEAR = indicator.FIRST_SOURCE_YEAR
 API_YEAR_CHUNK = bls.API_YEAR_CHUNK
 HTTP_TIMEOUT_SECONDS = bls.HTTP_TIMEOUT_SECONDS
 USER_AGENT = bls.USER_AGENT
-ONE_DECIMAL = Decimal("0.1")
+ONE_DECIMAL = indicator.ONE_DECIMAL
 
 OUTPUT_COLUMNS = [
     "year",
@@ -146,101 +140,30 @@ def calculate_rows(
     source_method: str,
     retrieval_date: str | None = None,
 ) -> list[Dict[str, object]]:
-    """Calculate one audited annual indicator row for every matched year."""
+    """Compatibility wrapper for the indicator calculation module."""
 
-    retrieval_date = retrieval_date or current_retrieval_date()
-    years = sorted(observations[ENROLLED_SERIES])
-    rows: list[Dict[str, object]] = []
-
-    for year in years:
-        enrolled = observations[ENROLLED_SERIES][year]
-        not_enrolled = observations[NOT_ENROLLED_SERIES][year]
-        employed_not_enrolled = observations[EMPLOYED_NOT_ENROLLED_SERIES][year]
-        denominator = enrolled + not_enrolled
-        if denominator <= 0:
-            raise RuntimeError(f"Invalid non-positive population denominator for {year}")
-        if employed_not_enrolled > not_enrolled:
-            raise RuntimeError(
-                f"Employed not-enrolled population exceeds not-enrolled population for {year}"
-            )
-
-        calculated = (
-            Decimal("100") * (not_enrolled - employed_not_enrolled) / denominator
-        ).quantize(ONE_DECIMAL, rounding=ROUND_HALF_UP)
-        rows.append(
-            {
-                "year": year,
-                "enrolled_population_thousands": decimal_text(enrolled),
-                "not_enrolled_population_thousands": decimal_text(not_enrolled),
-                "employed_not_enrolled_thousands": decimal_text(
-                    employed_not_enrolled
-                ),
-                "calculated_value": decimal_text(calculated),
-                "source_method": source_method,
-                "retrieval_date": retrieval_date,
-            }
-        )
-
-    return rows
+    return indicator.calculate(observations, source_method, retrieval_date)
 
 
 def decimal_text(value: Decimal) -> str:
-    """Write ordinary decimal notation without scientific notation."""
+    """Compatibility wrapper for indicator decimal formatting."""
 
-    return format(value, "f")
+    return indicator.decimal_text(value)
 
 
 def read_archived_values() -> Dict[int, Decimal]:
-    """Read canonical legacy values directly from sdg-master.zip in SDGs.tar."""
+    """Compatibility wrapper for indicator-specific archive interpretation."""
 
-    try:
-        csv_text = read_nested_zip_member(
-            ARCHIVE_PATH, CANONICAL_ZIP_MEMBER, CANONICAL_DATA_PATH
-        ).decode("utf-8-sig")
-    except (ArchiveReadError, UnicodeDecodeError) as error:
-        raise RuntimeError(
-            "Could not read the archived canonical SDG 8.6.1 CSV"
-        ) from error
-
-    archived: Dict[int, Decimal] = {}
-    for row in csv.DictReader(io.StringIO(csv_text, newline="")):
-        try:
-            year = int(row["Year"])
-            value = Decimal(row["Value"]).quantize(
-                ONE_DECIMAL, rounding=ROUND_HALF_UP
-            )
-        except (KeyError, ValueError, ArithmeticError) as error:
-            raise RuntimeError(f"Invalid archived SDG row: {row}") from error
-        if year in archived:
-            raise RuntimeError(f"Duplicate archived SDG year: {year}")
-        archived[year] = value
-    return archived
+    return indicator.read_archived_values(ARCHIVE_PATH)
 
 
 def validate_against_archive(
     calculated_rows: Sequence[Mapping[str, object]],
     archived_values: Mapping[int, Decimal],
 ) -> Dict[str, object]:
-    """Compare calculated and archived values for every overlapping year."""
+    """Compatibility wrapper for indicator-specific archive validation."""
 
-    calculated = {
-        int(row["year"]): Decimal(str(row["calculated_value"]))
-        for row in calculated_rows
-    }
-    overlap = sorted(set(calculated) & set(archived_values))
-    if not overlap:
-        raise RuntimeError("No overlapping years exist for archive validation")
-
-    differences = {
-        year: abs(calculated[year] - archived_values[year]) for year in overlap
-    }
-    mismatches = [year for year in overlap if differences[year] != 0]
-    return {
-        "overlapping_years": len(overlap),
-        "exact_matches": len(overlap) - len(mismatches),
-        "maximum_absolute_difference": max(differences.values()),
-        "mismatching_years": mismatches,
-    }
+    return indicator.validate_against_archive(calculated_rows, archived_values)
 
 
 def write_output_atomically(rows: Sequence[Mapping[str, object]]) -> None:
