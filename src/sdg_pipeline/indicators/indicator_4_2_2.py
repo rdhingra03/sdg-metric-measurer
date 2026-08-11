@@ -16,9 +16,17 @@ from typing import Dict, Mapping, Sequence
 
 from ..archive import ArchiveReadError, read_nested_zip_member
 from ..sources.census_cps import CpsObservation
+from ..standardized import (
+    ARCHIVE_MATCHED,
+    ARCHIVE_MISMATCH,
+    NOT_ARCHIVE_VALIDATED,
+    StandardizedObservation,
+)
 
 
 INDICATOR_ID = "4.2.2"
+INDICATOR_TITLE = "Percentage of 5-year-olds enrolled in organized learning"
+METHODOLOGY_VARIANT = "legacy_us_cps_age_5_organized_learning"
 REQUIRED_PERSON_VARIABLES = ("PRTAGE", "PESCH35", "PECHGRDE", "PESEX")
 TARGET_AGE = 5
 ENROLLED_CODE = 1
@@ -384,3 +392,69 @@ def validate_against_archive(
         ),
         "sex_mismatches": sex_mismatches,
     }
+
+
+def _standardized_validation_status(
+    year: int,
+    group_name: str,
+    calculated: Fraction,
+    archived: Mapping[tuple[int, str], ArchivedValue],
+) -> str:
+    """Return the per-observation archive status at stored archive precision."""
+
+    key = (year, group_name)
+    if key not in archived:
+        return NOT_ARCHIVE_VALIDATED
+    if compare_at_archived_precision(calculated, archived[key]) == 0:
+        return ARCHIVE_MATCHED
+    return ARCHIVE_MISMATCH
+
+
+def build_standardized_observations(
+    results: Sequence[YearResult],
+    archived: Mapping[tuple[int, str], ArchivedValue],
+    retrieval_date: str,
+    source_organization: str,
+    source_dataset: str,
+) -> list[StandardizedObservation]:
+    """Translate national and sex results to the common observation schema."""
+
+    observations: list[StandardizedObservation] = []
+    for result in results:
+        warning = AGE_QUALIFICATION
+        if result.year == 2020:
+            warning = f"{warning} {PANDEMIC_WARNING}"
+
+        groups = (
+            ("National", result.national, {}),
+            ("Male", result.male, {"sex": "Male"}),
+            ("Female", result.female, {"sex": "Female"}),
+        )
+        for group_name, group, disaggregation in groups:
+            observations.append(
+                StandardizedObservation(
+                    indicator_id=INDICATOR_ID,
+                    indicator_title=INDICATOR_TITLE,
+                    year=result.year,
+                    value=decimal_text(
+                        fraction_to_decimal(group.calculated_fraction)
+                    ),
+                    unit="percent",
+                    geography="United States",
+                    disaggregation=disaggregation,
+                    source_organization=source_organization,
+                    source_dataset=source_dataset,
+                    source_url=result.source_url,
+                    retrieval_method=result.retrieval_method,
+                    retrieval_date=retrieval_date,
+                    methodology_variant=METHODOLOGY_VARIANT,
+                    validation_status=_standardized_validation_status(
+                        result.year,
+                        group_name,
+                        group.calculated_fraction,
+                        archived,
+                    ),
+                    data_warning=warning,
+                )
+            )
+    return observations

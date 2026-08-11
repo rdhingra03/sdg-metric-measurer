@@ -40,6 +40,7 @@ from sdg_pipeline.errors import RetrievalError
 from sdg_pipeline.indicators import indicator_4_2_2 as indicator
 from sdg_pipeline.output import current_retrieval_date, write_csv_outputs_atomically
 from sdg_pipeline.sources import census_cps
+from sdg_pipeline.standardized import write_standardized_csv
 
 
 ARCHIVE_PATH = PROJECT_ROOT / "source_materials" / "SDGs.tar"
@@ -48,6 +49,9 @@ CANONICAL_DATA_PATH = indicator.CANONICAL_DATA_PATH
 
 NATIONAL_OUTPUT_PATH = PROJECT_ROOT / "data_processed" / "sdg_4_2_2.csv"
 SEX_OUTPUT_PATH = PROJECT_ROOT / "data_processed" / "sdg_4_2_2_by_sex.csv"
+STANDARDIZED_OUTPUT_PATH = (
+    PROJECT_ROOT / "data_processed" / "standardized" / "sdg_4_2_2.csv"
+)
 
 DEFAULT_START_YEAR = 2018
 DEFAULT_END_YEAR = 2024
@@ -315,6 +319,12 @@ def write_outputs_atomically(
     )
 
 
+def write_standardized_output(observations) -> None:
+    """Atomically write national and sex observations in the common schema."""
+
+    write_standardized_csv(STANDARDIZED_OUTPUT_PATH, observations)
+
+
 def print_report(
     results: Sequence[YearResult], validation: Mapping[str, object]
 ) -> None:
@@ -325,6 +335,7 @@ def print_report(
     years = [result.year for result in results]
     print(f"Wrote {NATIONAL_OUTPUT_PATH}")
     print(f"Wrote {SEX_OUTPUT_PATH}")
+    print(f"Wrote {STANDARDIZED_OUTPUT_PATH}")
     print("Retrieval succeeded: yes")
     print("Retrieval method(s): " + ", ".join(methods))
     print("Years successfully retrieved: " + ", ".join(map(str, years)))
@@ -396,7 +407,15 @@ def main() -> None:
         national_rows, sex_rows = build_output_rows(
             results, retrieval_date=retrieval_date
         )
+        standardized_observations = indicator.build_standardized_observations(
+            results,
+            archived,
+            retrieval_date,
+            census_cps.CENSUS_SOURCE_ORGANIZATION,
+            census_cps.CENSUS_SOURCE_DATASET,
+        )
         write_outputs_atomically(national_rows, sex_rows)
+        write_standardized_output(standardized_observations)
         print_report(results, validation)
     except (RetrievalError, RuntimeError, OSError) as error:
         print(

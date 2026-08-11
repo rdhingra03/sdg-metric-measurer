@@ -35,12 +35,16 @@ from sdg_pipeline.errors import RetrievalError
 from sdg_pipeline.indicators import indicator_8_6_1 as indicator
 from sdg_pipeline.output import current_retrieval_date, write_csv_atomically
 from sdg_pipeline.sources import bls
+from sdg_pipeline.standardized import write_standardized_csv
 
 
 ARCHIVE_PATH = PROJECT_ROOT / "source_materials" / "SDGs.tar"
 CANONICAL_ZIP_MEMBER = indicator.CANONICAL_ZIP_MEMBER
 CANONICAL_DATA_PATH = indicator.CANONICAL_DATA_PATH
 OUTPUT_PATH = PROJECT_ROOT / "data_processed" / "sdg_8_6_1.csv"
+STANDARDIZED_OUTPUT_PATH = (
+    PROJECT_ROOT / "data_processed" / "standardized" / "sdg_8_6_1.csv"
+)
 
 BLS_API_URL = bls.BLS_API_URL
 BLS_BULK_DATA_URL = bls.BLS_BULK_DATA_URL
@@ -172,6 +176,12 @@ def write_output_atomically(rows: Sequence[Mapping[str, object]]) -> None:
     write_csv_atomically(OUTPUT_PATH, OUTPUT_COLUMNS, rows)
 
 
+def write_standardized_output(observations) -> None:
+    """Atomically write this indicator's common-schema observations."""
+
+    write_standardized_csv(STANDARDIZED_OUTPUT_PATH, observations)
+
+
 def print_report(
     rows: Sequence[Mapping[str, object]],
     source_method: str,
@@ -179,6 +189,7 @@ def print_report(
 ) -> None:
     latest = rows[-1]
     print(f"Wrote {OUTPUT_PATH}")
+    print(f"Wrote {STANDARDIZED_OUTPUT_PATH}")
     print("Retrieval succeeded: yes")
     print(f"Source method: {source_method}")
     print(f"Latest year: {latest['year']}")
@@ -204,7 +215,16 @@ def main() -> None:
         rows = calculate_rows(observations, source_method, retrieval_date)
         archived_values = read_archived_values()
         validation = validate_against_archive(rows, archived_values)
+        source_url = BLS_API_URL if source_method == "api" else BLS_BULK_DATA_URL
+        standardized_observations = indicator.build_standardized_observations(
+            rows,
+            archived_values,
+            bls.BLS_SOURCE_ORGANIZATION,
+            bls.BLS_SOURCE_DATASET,
+            source_url,
+        )
         write_output_atomically(rows)
+        write_standardized_output(standardized_observations)
         print_report(rows, source_method, validation)
     except (RetrievalError, RuntimeError) as error:
         print(f"Pipeline failed; existing output was not changed: {error}", file=sys.stderr)

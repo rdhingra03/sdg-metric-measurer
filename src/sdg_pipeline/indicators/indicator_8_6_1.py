@@ -16,9 +16,19 @@ from typing import Dict, Mapping, Sequence
 
 from ..archive import ArchiveReadError, read_nested_zip_member
 from ..output import current_retrieval_date
+from ..standardized import (
+    ARCHIVE_MATCHED,
+    ARCHIVE_MISMATCH,
+    NOT_ARCHIVE_VALIDATED,
+    StandardizedObservation,
+)
 
 
 INDICATOR_ID = "8.6.1"
+INDICATOR_TITLE = (
+    "Percentage of youth ages 16-24 who are not enrolled in school and not employed"
+)
+METHODOLOGY_VARIANT = "legacy_us_proxy_ages_16_24_not_enrolled_not_employed"
 ENROLLED_SERIES = "LNU00022967"
 NOT_ENROLLED_SERIES = "LNU00023016"
 EMPLOYED_NOT_ENROLLED_SERIES = "LNU02023016"
@@ -199,3 +209,50 @@ def validate_against_archive(
         "maximum_absolute_difference": max(differences.values()),
         "mismatching_years": mismatches,
     }
+
+
+def build_standardized_observations(
+    calculated_rows: Sequence[Mapping[str, object]],
+    archived_values: Mapping[int, Decimal],
+    source_organization: str,
+    source_dataset: str,
+    source_url: str,
+) -> list[StandardizedObservation]:
+    """Translate calculated rows to the common observation schema.
+
+    The standardized value deliberately uses the same one-decimal presentation
+    value as the existing indicator output.  Archive status is attached per
+    year so later data-card tools do not have to repeat validation logic.
+    """
+
+    observations: list[StandardizedObservation] = []
+    for row in calculated_rows:
+        year = int(row["year"])
+        value = Decimal(str(row["calculated_value"]))
+        if year not in archived_values:
+            validation_status = NOT_ARCHIVE_VALIDATED
+        elif value == archived_values[year]:
+            validation_status = ARCHIVE_MATCHED
+        else:
+            validation_status = ARCHIVE_MISMATCH
+
+        observations.append(
+            StandardizedObservation(
+                indicator_id=INDICATOR_ID,
+                indicator_title=INDICATOR_TITLE,
+                year=year,
+                value=decimal_text(value),
+                unit="percent",
+                geography="United States",
+                disaggregation={},
+                source_organization=source_organization,
+                source_dataset=source_dataset,
+                source_url=source_url,
+                retrieval_method=str(row["source_method"]),
+                retrieval_date=str(row["retrieval_date"]),
+                methodology_variant=METHODOLOGY_VARIANT,
+                validation_status=validation_status,
+                data_warning=METHODOLOGY_WARNING,
+            )
+        )
+    return observations
