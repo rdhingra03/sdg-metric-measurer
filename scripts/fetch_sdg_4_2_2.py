@@ -23,19 +23,15 @@ from __future__ import annotations
 
 import argparse
 import csv
-import gzip
 import io
-import json
 import os
 import sys
-import urllib.parse
 import urllib.request
-import zipfile
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 from fractions import Fraction
 from pathlib import Path
-from typing import Dict, Iterator, Mapping, Sequence
+from typing import Dict, Mapping, Sequence
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -45,12 +41,8 @@ if str(SRC_ROOT) not in sys.path:
 
 from sdg_pipeline.archive import ArchiveReadError, read_nested_zip_member
 from sdg_pipeline.errors import RetrievalError
-from sdg_pipeline.http import (
-    DEFAULT_HTTP_TIMEOUT_SECONDS,
-    PROJECT_USER_AGENT,
-    request_bytes as shared_request_bytes,
-)
 from sdg_pipeline.output import current_retrieval_date, write_csv_outputs_atomically
+from sdg_pipeline.sources import census_cps
 
 
 ARCHIVE_PATH = PROJECT_ROOT / "source_materials" / "SDGs.tar"
@@ -62,15 +54,15 @@ SEX_OUTPUT_PATH = PROJECT_ROOT / "data_processed" / "sdg_4_2_2_by_sex.csv"
 
 DEFAULT_START_YEAR = 2018
 DEFAULT_END_YEAR = 2024
-API_FIRST_YEAR = 2000
-API_LAST_YEAR = 2024
-HTTP_TIMEOUT_SECONDS = DEFAULT_HTTP_TIMEOUT_SECONDS
-USER_AGENT = f"{PROJECT_USER_AGENT} (official Census public data client)"
+API_FIRST_YEAR = census_cps.API_FIRST_YEAR
+API_LAST_YEAR = census_cps.API_LAST_YEAR
+HTTP_TIMEOUT_SECONDS = census_cps.HTTP_TIMEOUT_SECONDS
+USER_AGENT = census_cps.USER_AGENT
 
 # CPS person weights in these files have four implied decimal places. Keeping
 # the raw integer weights makes the percentage calculation exact; output counts
 # are divided by this scale to show estimated people rather than storage units.
-WEIGHT_SCALE = 10_000
+WEIGHT_SCALE = census_cps.WEIGHT_SCALE
 ORGANIZED_LEARNING_GRADES = range(1, 17)
 
 NATIONAL_COLUMNS = [
@@ -86,44 +78,6 @@ NATIONAL_COLUMNS = [
     "retrieval_date",
 ]
 SEX_COLUMNS = ["year", "sex", *NATIONAL_COLUMNS[1:]]
-
-
-@dataclass(frozen=True)
-class FieldPosition:
-    """One inclusive, one-based field location from a CPS record layout."""
-
-    start: int
-    end: int
-
-    def read(self, record: bytes) -> str:
-        """Read and trim this field from one fixed-width record."""
-
-        return record[self.start - 1 : self.end].decode(
-            "ascii", errors="strict"
-        ).strip()
-
-
-@dataclass(frozen=True)
-class FixedWidthLayout:
-    """Published variable positions shared by one or more CPS file years."""
-
-    name: str
-    minimum_record_length: int
-    prtage: FieldPosition
-    pesex: FieldPosition
-    pesch35: FieldPosition
-    pechgrde: FieldPosition
-    weight: FieldPosition
-
-
-@dataclass(frozen=True)
-class DownloadConfig:
-    """Official fallback file and parsing instructions for one survey year."""
-
-    url: str
-    file_format: str
-    layout: FixedWidthLayout
-    archive_member: str | None = None
 
 
 @dataclass(frozen=True)
@@ -169,65 +123,30 @@ class ArchivedValue:
     decimal_places: int
 
 
-# The October 2018--2024 technical documentation gives the same locations for
-# all variables needed here. A named layout object is used rather than assuming
-# that every historical CPS year has the same fixed-width structure. Adding an
-# older fallback year requires checking its own technical documentation and
-# either reusing a verified layout or defining another one.
-LAYOUT_2018_2024 = FixedWidthLayout(
-    name="CPS October School Enrollment 2018-2024",
-    minimum_record_length=1090,
-    prtage=FieldPosition(122, 123),
-    pesex=FieldPosition(129, 130),
-    pesch35=FieldPosition(1027, 1028),
-    pechgrde=FieldPosition(1033, 1034),
-    weight=FieldPosition(1081, 1090),
-)
+FieldPosition = census_cps.FieldPosition
+FixedWidthLayout = census_cps.FixedWidthLayout
+DownloadConfig = census_cps.DownloadConfig
+LAYOUT_2018_2024 = census_cps.LAYOUT_2018_2024
+DOWNLOAD_CONFIGS = census_cps.DOWNLOAD_CONFIGS
+REQUIRED_PERSON_VARIABLES = ("PRTAGE", "PESCH35", "PECHGRDE", "PESEX")
 
 
 def census_download_url(year: int) -> str:
-    """Return the official Census ZIP URL for a recent October CPS file."""
+    """Compatibility wrapper for the connector's official download URL."""
 
-    short_year = str(year)[-2:]
-    return (
-        "https://www2.census.gov/programs-surveys/cps/datasets/"
-        f"{year}/supp/oct{short_year}pub.zip"
-    )
-
-
-# Each supported fallback year is listed explicitly. This makes file names,
-# formats, and layout decisions easy to audit and prevents a future layout
-# change from silently being parsed with an old configuration.
-DOWNLOAD_CONFIGS: Dict[int, DownloadConfig] = {
-    year: DownloadConfig(
-        url=census_download_url(year),
-        file_format="zip",
-        layout=LAYOUT_2018_2024,
-        archive_member=f"oct{str(year)[-2:]}pub.dat",
-    )
-    for year in range(2018, 2025)
-}
-# The 2019 ZIP alone stores the data file inside a nested Census production
-# directory. Keeping this exception in the year configuration avoids guessing
-# or silently selecting an unexpected ZIP member.
-DOWNLOAD_CONFIGS[2019] = DownloadConfig(
-    url=census_download_url(2019),
-    file_format="zip",
-    layout=LAYOUT_2018_2024,
-    archive_member="cpspb/supp/data/oct19/oct19pub.dat",
-)
+    return census_cps.census_download_url(year)
 
 
 def weight_variable_for_year(year: int) -> str:
-    """Return the historically correct person weight for a survey year."""
+    """Compatibility wrapper for the historical CPS weight transition."""
 
-    return "PWSSWGT" if year <= 2005 else "PWSUPWGT"
+    return census_cps.weight_variable_for_year(year)
 
 
 def api_dataset_url(year: int) -> str:
-    """Return the public landing page for one Census API dataset."""
+    """Compatibility wrapper for the public Census dataset landing page."""
 
-    return f"https://api.census.gov/data/{year}/cps/school/oct.html"
+    return census_cps.api_dataset_url(year)
 
 
 def request_bytes(
@@ -235,181 +154,103 @@ def request_bytes(
 ) -> tuple[bytes, str]:
     """Read one HTTP response without exposing an API key in errors."""
 
-    return shared_request_bytes(
-        request, display_url=display_url, timeout=HTTP_TIMEOUT_SECONDS
-    )
+    return census_cps.request_bytes(request, display_url)
 
 
 def parse_integer(value: object, variable: str, year: int) -> int:
-    """Parse a required CPS integer and produce a useful error if malformed."""
+    """Compatibility wrapper for validated CPS integer parsing."""
 
-    text = str(value).strip()
-    try:
-        return int(text)
-    except ValueError as error:
-        raise RetrievalError(
-            f"Invalid {variable} value in {year} CPS data: {text!r}"
-        ) from error
+    return census_cps.parse_integer(value, variable, year)
 
 
 def person_from_mapping(
     row: Mapping[str, object], year: int, weight_variable: str
 ) -> PersonRecord:
-    """Build a validated person record from API-style named fields."""
+    """Translate a generic connector observation to this indicator's record."""
+
+    variables = (*REQUIRED_PERSON_VARIABLES, weight_variable)
+    observation = census_cps.observation_from_mapping(row, year, variables)
+    return person_from_observation(observation, weight_variable)
+
+
+def person_from_observation(
+    observation: census_cps.CpsObservation, weight_variable: str
+) -> PersonRecord:
+    """Translate named CPS variables without applying indicator calculations."""
 
     return PersonRecord(
-        age=parse_integer(row.get("PRTAGE", ""), "PRTAGE", year),
-        enrollment=parse_integer(row.get("PESCH35", ""), "PESCH35", year),
-        grade=parse_integer(row.get("PECHGRDE", ""), "PECHGRDE", year),
-        sex=parse_integer(row.get("PESEX", ""), "PESEX", year),
-        raw_weight=parse_integer(
-            row.get(weight_variable, ""), weight_variable, year
-        ),
+        age=observation.value("PRTAGE"),
+        enrollment=observation.value("PESCH35"),
+        grade=observation.value("PECHGRDE"),
+        sex=observation.value("PESEX"),
+        raw_weight=observation.value(weight_variable),
     )
 
 
 def fetch_from_api(year: int, api_key: str) -> list[PersonRecord]:
-    """Fetch age-5 person records from the official Census Microdata API."""
-
-    if not (API_FIRST_YEAR <= year <= API_LAST_YEAR):
-        raise RetrievalError(f"The configured Census API does not support {year}")
+    """Fetch the requested age-5 fields through the Census connector."""
 
     weight_variable = weight_variable_for_year(year)
-    variables = ["PRTAGE", "PESCH35", "PECHGRDE", "PESEX", weight_variable]
-    base_url = f"https://api.census.gov/data/{year}/cps/school/oct"
-    query = urllib.parse.urlencode(
-        {
-            "get": ",".join(variables),
-            "PRTAGE": "5",
-            "key": api_key,
-        }
+    variables = (*REQUIRED_PERSON_VARIABLES, weight_variable)
+    observations = census_cps.fetch_from_api(
+        year,
+        api_key,
+        variables,
+        query_filters={"PRTAGE": 5},
+        request_executor=request_bytes,
     )
-    request = urllib.request.Request(
-        f"{base_url}?{query}",
-        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
-    )
-    body, content_type = request_bytes(request, api_dataset_url(year))
-
-    if body.lstrip().startswith(b"<") or content_type not in {
-        "application/json",
-        "text/json",
-        "text/plain",
-    }:
-        preview = body.lstrip()[:80].decode("utf-8", errors="replace")
-        raise RetrievalError(
-            f"Census API returned a non-JSON response for {year} "
-            f"({content_type!r}; starts with {preview!r})"
-        )
-
-    try:
-        payload = json.loads(body)
-    except (json.JSONDecodeError, UnicodeDecodeError) as error:
-        raise RetrievalError(f"Census API returned invalid JSON for {year}") from error
-
-    if not isinstance(payload, list) or len(payload) < 2:
-        raise RetrievalError(f"Census API returned no person records for {year}")
-    header = payload[0]
-    if not isinstance(header, list) or any(
-        variable not in header for variable in variables
-    ):
-        raise RetrievalError(f"Census API response omitted required fields for {year}")
-
-    records: list[PersonRecord] = []
-    for values in payload[1:]:
-        if not isinstance(values, list) or len(values) != len(header):
-            raise RetrievalError(f"Census API returned a malformed row for {year}")
-        records.append(
-            person_from_mapping(dict(zip(header, values)), year, weight_variable)
-        )
-    return records
+    return [
+        person_from_observation(observation, weight_variable)
+        for observation in observations
+    ]
 
 
 def open_downloaded_records(
     body: bytes, config: DownloadConfig, year: int
-) -> Iterator[bytes]:
-    """Yield raw records from a validated ZIP or gzip response in memory."""
+):
+    """Compatibility wrapper for ZIP/gzip record iteration."""
 
-    if config.file_format == "zip":
-        if not body.startswith(b"PK"):
-            raise RetrievalError(f"Census download for {year} is not a ZIP file")
-        try:
-            with zipfile.ZipFile(io.BytesIO(body)) as archive:
-                member = config.archive_member
-                if member is None or member not in archive.namelist():
-                    raise RetrievalError(
-                        f"Census ZIP for {year} does not contain {member!r}"
-                    )
-                with archive.open(member) as stream:
-                    yield from stream
-        except zipfile.BadZipFile as error:
-            raise RetrievalError(f"Census ZIP for {year} is corrupt") from error
-        return
-
-    if config.file_format == "gzip":
-        if not body.startswith(b"\x1f\x8b"):
-            raise RetrievalError(f"Census download for {year} is not gzip data")
-        try:
-            with gzip.GzipFile(fileobj=io.BytesIO(body)) as stream:
-                yield from stream
-        except OSError as error:
-            raise RetrievalError(f"Census gzip file for {year} is corrupt") from error
-        return
-
-    raise RetrievalError(
-        f"Unsupported configured file format for {year}: {config.file_format}"
-    )
+    return census_cps.open_downloaded_records(body, config, year)
 
 
 def parse_fixed_width_record(
     raw_line: bytes, layout: FixedWidthLayout, year: int, weight_variable: str
 ) -> PersonRecord | None:
-    """Parse one person using the year's verified fixed-width layout."""
+    """Translate one connector-parsed fixed-width record for this indicator."""
 
-    record = raw_line.rstrip(b"\r\n")
-    if not record:
-        return None
-    if len(record) < layout.minimum_record_length:
-        raise RetrievalError(
-            f"Short fixed-width record in {year}: expected at least "
-            f"{layout.minimum_record_length} bytes, found {len(record)}"
-        )
-
-    age = parse_integer(layout.prtage.read(record), "PRTAGE", year)
-    if age != 5:
-        return None
-    return PersonRecord(
-        age=age,
-        enrollment=parse_integer(layout.pesch35.read(record), "PESCH35", year),
-        grade=parse_integer(layout.pechgrde.read(record), "PECHGRDE", year),
-        sex=parse_integer(layout.pesex.read(record), "PESEX", year),
-        raw_weight=parse_integer(layout.weight.read(record), weight_variable, year),
+    variables = (*REQUIRED_PERSON_VARIABLES, weight_variable)
+    observation = census_cps.parse_fixed_width_record(
+        raw_line,
+        layout,
+        year,
+        variables,
+        record_filters={"PRTAGE": 5},
     )
+    if observation is None:
+        return None
+    return person_from_observation(observation, weight_variable)
 
 
 def fetch_from_download(year: int) -> tuple[list[PersonRecord], str]:
-    """Download and parse one configured official public-use microdata file."""
+    """Fetch this indicator's fields from official public-use microdata."""
 
-    config = DOWNLOAD_CONFIGS.get(year)
-    if config is None:
-        raise RetrievalError(
-            f"No verified downloadable-file layout is configured for {year}. "
-            "Use a supported API year with CENSUS_API_KEY or add a layout "
-            "from that year's official technical documentation."
-        )
-
-    request = urllib.request.Request(config.url, headers={"User-Agent": USER_AGENT})
-    body, _content_type = request_bytes(request, config.url)
     weight_variable = weight_variable_for_year(year)
-    records = []
-    for raw_line in open_downloaded_records(body, config, year):
-        record = parse_fixed_width_record(
-            raw_line, config.layout, year, weight_variable
-        )
-        if record is not None:
-            records.append(record)
-    if not records:
-        raise RetrievalError(f"No 5-year-old records were found in the {year} file")
-    return records, config.url
+    variables = (*REQUIRED_PERSON_VARIABLES, weight_variable)
+    observations, source_url = census_cps.fetch_from_download(
+        year,
+        variables,
+        download_configs=DOWNLOAD_CONFIGS,
+        record_filters={"PRTAGE": 5},
+        request_executor=request_bytes,
+        records_description="5-year-old records",
+    )
+    return (
+        [
+            person_from_observation(observation, weight_variable)
+            for observation in observations
+        ],
+        source_url,
+    )
 
 
 def retrieve_year(
@@ -417,24 +258,20 @@ def retrieve_year(
 ) -> tuple[list[PersonRecord], str, str]:
     """Prefer the API when configured, then use the official download fallback."""
 
-    if api_key and API_FIRST_YEAR <= year <= API_LAST_YEAR:
-        try:
-            return fetch_from_api(year, api_key), "api", api_dataset_url(year)
-        except RetrievalError as api_error:
-            print(
-                f"{year}: Census API unavailable or invalid: {api_error}\n"
-                "  Trying the official downloadable microdata fallback...",
-                file=sys.stderr,
-            )
-    elif not api_key:
-        print(
-            f"{year}: CENSUS_API_KEY is not configured; using the official "
-            "downloadable microdata fallback.",
-            file=sys.stderr,
-        )
-
-    records, source_url = fetch_from_download(year)
-    return records, "download", source_url
+    weight_variable = weight_variable_for_year(year)
+    variables = (*REQUIRED_PERSON_VARIABLES, weight_variable)
+    result = census_cps.retrieve_year(
+        year,
+        variables,
+        api_key=api_key,
+        query_filters={"PRTAGE": 5},
+        record_filters={"PRTAGE": 5},
+        download_configs=DOWNLOAD_CONFIGS,
+        api_fetcher=lambda: fetch_from_api(year, api_key or ""),
+        download_fetcher=lambda: fetch_from_download(year),
+        warning_handler=lambda warning: print(warning, file=sys.stderr),
+    )
+    return result.observations, result.retrieval_method, result.source_url
 
 
 def calculate_group(
@@ -759,7 +596,7 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     arguments = parse_arguments()
-    api_key = os.environ.get("CENSUS_API_KEY", "").strip() or None
+    api_key = census_cps.configured_api_key()
     try:
         retrieval_date = current_retrieval_date()
         results = []

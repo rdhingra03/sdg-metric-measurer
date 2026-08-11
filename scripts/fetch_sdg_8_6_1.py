@@ -19,15 +19,13 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import os
 import sys
-import urllib.error
 import urllib.request
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-from typing import Dict, Iterable, Mapping, Sequence, Tuple
+from typing import Dict, Mapping, Sequence, Tuple
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -37,12 +35,8 @@ if str(SRC_ROOT) not in sys.path:
 
 from sdg_pipeline.archive import ArchiveReadError, read_nested_zip_member
 from sdg_pipeline.errors import RetrievalError
-from sdg_pipeline.http import (
-    DEFAULT_HTTP_TIMEOUT_SECONDS,
-    PROJECT_USER_AGENT,
-    request_bytes as shared_request_bytes,
-)
 from sdg_pipeline.output import current_retrieval_date, write_csv_atomically
+from sdg_pipeline.sources import bls
 
 
 ARCHIVE_PATH = PROJECT_ROOT / "source_materials" / "SDGs.tar"
@@ -50,12 +44,8 @@ CANONICAL_ZIP_MEMBER = "SDGs/sdg-master.zip"
 CANONICAL_DATA_PATH = "sdg-master/data/indicator_8-6-1.csv"
 OUTPUT_PATH = PROJECT_ROOT / "data_processed" / "sdg_8_6_1.csv"
 
-BLS_API_URL = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
-# downloadt.bls.gov is an official BLS bulk-download host.  It provides the
-# same LN files listed under download.bls.gov and is useful during API outages.
-BLS_BULK_DATA_URL = (
-    "https://downloadt.bls.gov/pub/time.series/ln/ln.data.1.AllData"
-)
+BLS_API_URL = bls.BLS_API_URL
+BLS_BULK_DATA_URL = bls.BLS_BULK_DATA_URL
 
 ENROLLED_SERIES = "LNU00022967"
 NOT_ENROLLED_SERIES = "LNU00023016"
@@ -67,9 +57,9 @@ SERIES_IDS = (
 )
 
 FIRST_BLS_YEAR = 1985
-API_YEAR_CHUNK = 10
-HTTP_TIMEOUT_SECONDS = DEFAULT_HTTP_TIMEOUT_SECONDS
-USER_AGENT = f"{PROJECT_USER_AGENT} (official BLS public data client)"
+API_YEAR_CHUNK = bls.API_YEAR_CHUNK
+HTTP_TIMEOUT_SECONDS = bls.HTTP_TIMEOUT_SECONDS
+USER_AGENT = bls.USER_AGENT
 ONE_DECIMAL = Decimal("0.1")
 
 OUTPUT_COLUMNS = [
@@ -86,125 +76,32 @@ OUTPUT_COLUMNS = [
 def request_bytes(request: urllib.request.Request) -> Tuple[bytes, str]:
     """Return an HTTP response body and content type with a bounded timeout."""
 
-    return shared_request_bytes(
-        request, display_url=BLS_API_URL, timeout=HTTP_TIMEOUT_SECONDS
-    )
+    return bls.request_bytes(request)
 
 
-def year_chunks(start_year: int, end_year: int) -> Iterable[Tuple[int, int]]:
-    """Yield API-safe inclusive year ranges of at most ten years."""
+def year_chunks(start_year: int, end_year: int):
+    """Compatibility wrapper for the BLS connector's API-safe year chunks."""
 
-    chunk_start = start_year
-    while chunk_start <= end_year:
-        chunk_end = min(chunk_start + API_YEAR_CHUNK - 1, end_year)
-        yield chunk_start, chunk_end
-        chunk_start = chunk_end + 1
+    return bls.year_chunks(start_year, end_year, API_YEAR_CHUNK)
 
 
 def fetch_from_api() -> Dict[str, Dict[int, Decimal]]:
-    """Fetch M13 observations for all required series from the BLS API."""
+    """Fetch this indicator's three M13 series through the BLS connector."""
 
-    observations: Dict[str, Dict[int, Decimal]] = {
-        series_id: {} for series_id in SERIES_IDS
-    }
-
-    for start_year, end_year in year_chunks(FIRST_BLS_YEAR, date.today().year):
-        payload = json.dumps(
-            {
-                "seriesid": list(SERIES_IDS),
-                "startyear": str(start_year),
-                "endyear": str(end_year),
-            }
-        ).encode("utf-8")
-        request = urllib.request.Request(
-            BLS_API_URL,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": USER_AGENT,
-            },
-            method="POST",
-        )
-        body, content_type = request_bytes(request)
-
-        # A maintenance page can arrive with HTTP 200.  Check both the declared
-        # content type and the first non-whitespace character before parsing.
-        if content_type != "application/json" or body.lstrip().startswith(b"<"):
-            preview = body.lstrip()[:80].decode("utf-8", errors="replace")
-            raise RetrievalError(
-                "BLS API returned a non-JSON response "
-                f"({content_type!r}; starts with {preview!r})"
-            )
-
-        try:
-            response_data = json.loads(body)
-        except (json.JSONDecodeError, UnicodeDecodeError) as error:
-            raise RetrievalError("BLS API returned invalid JSON") from error
-
-        if response_data.get("status") != "REQUEST_SUCCEEDED":
-            message = "; ".join(response_data.get("message") or [])
-            raise RetrievalError(f"BLS API request was unsuccessful: {message}")
-
-        returned_series = response_data.get("Results", {}).get("series", [])
-        returned_ids = {series.get("seriesID") for series in returned_series}
-        missing_ids = sorted(set(SERIES_IDS) - returned_ids)
-        if missing_ids:
-            raise RetrievalError(
-                "BLS API response omitted required series: " + ", ".join(missing_ids)
-            )
-
-        for series in returned_series:
-            series_id = series.get("seriesID")
-            if series_id not in observations:
-                continue
-            for item in series.get("data", []):
-                if item.get("period") != "M13":
-                    continue
-                add_observation(
-                    observations,
-                    series_id,
-                    item.get("year", ""),
-                    item.get("value", ""),
-                    "BLS API",
-                )
-
-    validate_observations(observations, "BLS API")
-    return observations
+    return bls.fetch_from_api(
+        SERIES_IDS,
+        FIRST_BLS_YEAR,
+        date.today().year,
+        "M13",
+        request_executor=request_bytes,
+        chunker=year_chunks,
+    )
 
 
 def fetch_from_bulk_data() -> Dict[str, Dict[int, Decimal]]:
-    """Stream M13 records from the official BLS LN bulk data file."""
+    """Fetch this indicator's three M13 series from LABSTAT bulk data."""
 
-    observations: Dict[str, Dict[int, Decimal]] = {
-        series_id: {} for series_id in SERIES_IDS
-    }
-    request = urllib.request.Request(
-        BLS_BULK_DATA_URL,
-        headers={"User-Agent": USER_AGENT},
-    )
-
-    try:
-        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
-            # The file is large, so process it line by line instead of holding
-            # hundreds of megabytes in memory or saving a temporary copy.
-            for raw_line in response:
-                line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
-                fields = [field.strip() for field in line.split("\t")]
-                if len(fields) < 4:
-                    continue
-                series_id, year, period, value = fields[:4]
-                if series_id in observations and period == "M13":
-                    add_observation(
-                        observations, series_id, year, value, "BLS bulk data"
-                    )
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
-        raise RetrievalError(
-            f"Official BLS bulk-data request failed: {error}"
-        ) from error
-
-    validate_observations(observations, "BLS bulk data")
-    return observations
+    return bls.fetch_from_bulk_data(SERIES_IDS, "M13")
 
 
 def add_observation(
@@ -214,80 +111,34 @@ def add_observation(
     value_text: object,
     source_name: str,
 ) -> None:
-    """Parse and add one annual observation, rejecting malformed duplicates."""
+    """Compatibility wrapper for BLS observation parsing."""
 
-    try:
-        year = int(str(year_text))
-        value = Decimal(str(value_text).replace(",", "").strip())
-    except (ValueError, ArithmeticError) as error:
-        raise RetrievalError(
-            f"Invalid {source_name} observation for {series_id}: "
-            f"year={year_text!r}, value={value_text!r}"
-        ) from error
-
-    existing = observations[series_id].get(year)
-    if existing is not None and existing != value:
-        raise RetrievalError(
-            f"Conflicting {source_name} M13 observations for {series_id}, {year}"
-        )
-    observations[series_id][year] = value
+    bls.add_observation(
+        observations, series_id, year_text, value_text, source_name, "M13"
+    )
 
 
 def validate_observations(
     observations: Mapping[str, Mapping[int, Decimal]], source_name: str
 ) -> None:
-    """Require complete, matching, continuous annual records for every series."""
+    """Compatibility wrapper for BLS observation validation."""
 
-    missing_series = [series_id for series_id in SERIES_IDS if not observations[series_id]]
-    if missing_series:
-        raise RetrievalError(
-            f"{source_name} has no M13 observations for: "
-            + ", ".join(missing_series)
-        )
-
-    year_sets = {series_id: set(observations[series_id]) for series_id in SERIES_IDS}
-    all_years = set().union(*year_sets.values())
-    incomplete = {
-        year: [series_id for series_id in SERIES_IDS if year not in year_sets[series_id]]
-        for year in sorted(all_years)
-        if any(year not in year_sets[series_id] for series_id in SERIES_IDS)
-    }
-    if incomplete:
-        details = "; ".join(
-            f"{year}: {', '.join(series_ids)}"
-            for year, series_ids in list(incomplete.items())[:10]
-        )
-        raise RetrievalError(
-            f"{source_name} is missing required annual observations ({details})"
-        )
-
-    first_year, last_year = min(all_years), max(all_years)
-    missing_years = sorted(set(range(first_year, last_year + 1)) - all_years)
-    if missing_years:
-        raise RetrievalError(
-            f"{source_name} annual observations have gaps: "
-            + ", ".join(map(str, missing_years))
-        )
+    bls.validate_observations(observations, SERIES_IDS, source_name, "M13")
 
 
 def retrieve_bls_data() -> Tuple[Dict[str, Dict[int, Decimal]], str]:
     """Prefer the API, falling back to official bulk data after any API failure."""
 
-    try:
-        return fetch_from_api(), "api"
-    except RetrievalError as api_error:
-        print(
-            f"BLS API unavailable or invalid: {api_error}\n"
-            "Trying the official BLS LN bulk-data fallback...",
-            file=sys.stderr,
-        )
-        try:
-            return fetch_from_bulk_data(), "bulk"
-        except RetrievalError as bulk_error:
-            raise RetrievalError(
-                "Both official retrieval methods failed. "
-                f"API error: {api_error}. Bulk-data error: {bulk_error}"
-            ) from bulk_error
+    result = bls.retrieve(
+        SERIES_IDS,
+        FIRST_BLS_YEAR,
+        date.today().year,
+        "M13",
+        api_fetcher=fetch_from_api,
+        bulk_fetcher=fetch_from_bulk_data,
+        warning_handler=lambda warning: print(warning, file=sys.stderr),
+    )
+    return result.observations, result.retrieval_method
 
 
 def calculate_rows(
