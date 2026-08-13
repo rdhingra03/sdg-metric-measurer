@@ -36,6 +36,7 @@ STANDARDIZED_COLUMNS = [
 ARCHIVE_MATCHED = "archive_matched"
 ARCHIVE_MISMATCH = "archive_mismatch"
 NOT_ARCHIVE_VALIDATED = "not_archive_validated"
+CURRENT_METHODOLOGY_VERIFIED = "current_methodology_verified"
 
 
 @dataclass(frozen=True)
