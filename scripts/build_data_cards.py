@@ -26,6 +26,9 @@ STANDARDIZED_DIR = PROJECT_ROOT / "data_processed" / "standardized"
 OUTPUT_PATH = PROJECT_ROOT / "output" / "data_cards" / "index.html"
 
 INDICATOR_ORDER = (
+    "3.4.2",
+    "3.6.1",
+    "3.9.3",
     "4.2.2",
     "8.5.2",
     "8.6.1",
@@ -45,6 +48,7 @@ INPUT_FILES = {
 # Only presentation rules live here. The observations themselves always come
 # from the standardized CSVs. The colors follow the familiar SDG goal palette.
 GOAL_COLORS = {
+    "3": "#4c9f38",
     "4": "#c5192d",
     "8": "#a21942",
     "10": "#dd1367",
