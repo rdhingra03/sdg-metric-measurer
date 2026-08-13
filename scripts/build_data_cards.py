@@ -27,6 +27,7 @@ OUTPUT_PATH = PROJECT_ROOT / "output" / "data_cards" / "index.html"
 
 INDICATOR_ORDER = (
     "4.2.2",
+    "8.5.2",
     "8.6.1",
     "8.a.1",
     "10.b.1",
@@ -203,6 +204,37 @@ def select_metrics(
                 "Least developed countries",
                 latest_matching(
                     observations, {"component": "Least developed countries"}
+                ),
+            ),
+        )
+    if indicator_id == "8.5.2":
+        return (
+            Metric(
+                "Men with disability",
+                latest_matching(
+                    observations,
+                    {"sex": "Male", "disability": "With disability"},
+                ),
+            ),
+            Metric(
+                "Women with disability",
+                latest_matching(
+                    observations,
+                    {"sex": "Female", "disability": "With disability"},
+                ),
+            ),
+            Metric(
+                "Men without disability",
+                latest_matching(
+                    observations,
+                    {"sex": "Male", "disability": "No disability"},
+                ),
+            ),
+            Metric(
+                "Women without disability",
+                latest_matching(
+                    observations,
+                    {"sex": "Female", "disability": "No disability"},
                 ),
             ),
         )
