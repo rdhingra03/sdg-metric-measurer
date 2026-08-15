@@ -3,7 +3,8 @@
 
 The generated page contains no manually entered observations. Every displayed
 year, value, title, unit, source, status, and warning is read from the existing
-CSV files in ``data_processed/standardized``. Because the data are embedded at
+CSV files in ``data_processed/standardized``. Reviewed comparison values come
+from ``data_processed/comparison``. Because both data layers are embedded at
 build time, the finished page can be opened directly from the local filesystem
 without running a web server.
 """
@@ -23,6 +24,7 @@ from typing import List, Mapping, Sequence, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STANDARDIZED_DIR = PROJECT_ROOT / "data_processed" / "standardized"
+COMPARISON_DIR = PROJECT_ROOT / "data_processed" / "comparison"
 OUTPUT_PATH = PROJECT_ROOT / "output" / "data_cards" / "index.html"
 
 INDICATOR_ORDER = (
@@ -45,6 +47,43 @@ INPUT_FILES = {
     indicator_id: STANDARDIZED_DIR
     / f"sdg_{indicator_id.replace('.', '_')}.csv"
     for indicator_id in INDICATOR_ORDER
+}
+
+COMPARISON_FILES = {
+    indicator_id: COMPARISON_DIR
+    / f"sdg_{indicator_id.replace('.', '_')}.csv"
+    for indicator_id in INDICATOR_ORDER
+}
+
+# Each entry lines up, in order, with the U.S. metrics selected below. These
+# are semantic component names from the reviewed comparison layer—not values.
+# Keeping the matching rules here prevents similarly named series from being
+# paired merely because they happen to have a recent year.
+COMPARISON_COMPONENTS = {
+    "3.1.2": ("national",),
+    "3.4.2": ("both_sexes",),
+    "3.6.1": ("national_rate",),
+    "3.7.2": ("ages_15_19", "ages_10_14"),
+    "3.9.3": ("both_sexes",),
+    "4.2.2": ("both_sexes",),
+    "8.5.2": (
+        "male_with_disability",
+        "female_with_disability",
+        "male_without_disability",
+        "female_without_disability",
+    ),
+    "8.6.1": ("both_sexes_ages_15_24",),
+    "8.a.1": ("donor_commitments", "donor_disbursements"),
+    "10.b.1": ("donor_assistance",),
+    "15.a.1": ("donor_biodiversity_oda_component_a",),
+    "15.b.1": ("donor_biodiversity_oda_component_a",),
+    "17.2.1": ("total_oda_gni_grant_equivalent", "ldc_oda_gni_net"),
+}
+
+COMPARISON_LABELS = {
+    "directly_comparable": "Comparable measure",
+    "comparable_with_methodology_difference": "Methodology differs",
+    "partial_component_comparison": "Component comparison",
 }
 
 # Only presentation rules live here. The observations themselves always come
@@ -84,6 +123,24 @@ REQUIRED_FIELDS = {
     "data_warning",
 }
 
+COMPARISON_REQUIRED_FIELDS = {
+    "indicator_id",
+    "comparison_component",
+    "year",
+    "value",
+    "unit",
+    "geography",
+    "disaggregation",
+    "source_url",
+    "custodian",
+    "comparison_status",
+    "completeness_status",
+    "is_preferred_comparison",
+    "notes",
+}
+
+DISALLOWED_COMPLETENESS = {"apparently_incomplete", "provisional"}
+
 
 @dataclass(frozen=True)
 class Observation:
@@ -96,11 +153,23 @@ class Observation:
 
 
 @dataclass(frozen=True)
+class ComparisonObservation:
+    """One reviewed, preferred observation from the UN comparison layer."""
+
+    row: Mapping[str, str]
+    component: str
+    year: int
+    value: Decimal
+    disaggregation: Mapping[str, str]
+
+
+@dataclass(frozen=True)
 class Metric:
     """One headline value shown within an indicator card."""
 
     label: str
     observation: Observation
+    comparison: ComparisonObservation | None = None
 
 
 @dataclass(frozen=True)
@@ -115,6 +184,11 @@ class Card:
     source_url: str
     validation_status: str
     warnings: Tuple[str, ...]
+    comparison_status: str = ""
+    comparison_label: str = ""
+    comparison_source_url: str = ""
+    comparison_custodians: Tuple[str, ...] = ()
+    comparison_notes: Tuple[str, ...] = ()
 
 
 def read_observations(indicator_id: str, path: Path) -> List[Observation]:
@@ -168,6 +242,83 @@ def read_observations(indicator_id: str, path: Path) -> List[Observation]:
     if not observations:
         raise ValueError(f"{path.name} contains no observations")
     return observations
+
+
+def read_comparison_observations(
+    indicator_id: str, path: Path
+) -> List[ComparisonObservation]:
+    """Read only reviewed preferred rows, rejecting unsafe selections.
+
+    The comparison builder may retain newer incomplete or provisional records
+    for audit purposes. Cards must never select those rows. A preferred flag on
+    such a row is treated as a data error rather than silently displayed.
+    """
+
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing comparison output: {path}")
+
+    preferred: List[ComparisonObservation] = []
+    with path.open("r", encoding="utf-8", newline="") as input_file:
+        reader = csv.DictReader(input_file)
+        missing_fields = sorted(
+            COMPARISON_REQUIRED_FIELDS - set(reader.fieldnames or [])
+        )
+        if missing_fields:
+            raise ValueError(
+                f"{path.name} is missing required comparison columns: "
+                + ", ".join(missing_fields)
+            )
+
+        for line_number, row in enumerate(reader, start=2):
+            if row["indicator_id"].strip() != indicator_id:
+                raise ValueError(
+                    f"{path.name}:{line_number} contains indicator "
+                    f"{row['indicator_id']!r}; expected {indicator_id!r}"
+                )
+            preferred_value = row["is_preferred_comparison"].strip().lower()
+            if preferred_value not in {"true", "false"}:
+                raise ValueError(
+                    f"{path.name}:{line_number} has an invalid preferred flag"
+                )
+            if preferred_value == "false":
+                continue
+
+            completeness = row["completeness_status"].strip().lower()
+            if completeness in DISALLOWED_COMPLETENESS:
+                raise ValueError(
+                    f"{path.name}:{line_number} marks a {completeness} row as "
+                    "the preferred card comparison"
+                )
+            try:
+                year = int(row["year"])
+                value = Decimal(row["value"])
+            except (ValueError, InvalidOperation) as error:
+                raise ValueError(
+                    f"{path.name}:{line_number} has an invalid year or value"
+                ) from error
+            try:
+                disaggregation = json.loads(row["disaggregation"] or "{}")
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"{path.name}:{line_number} has invalid disaggregation JSON"
+                ) from error
+            if not isinstance(disaggregation, dict):
+                raise ValueError(
+                    f"{path.name}:{line_number} disaggregation must be an object"
+                )
+            preferred.append(
+                ComparisonObservation(
+                    row=row,
+                    component=row["comparison_component"].strip(),
+                    year=year,
+                    value=value,
+                    disaggregation=disaggregation,
+                )
+            )
+
+    if not preferred:
+        raise ValueError(f"{path.name} has no preferred comparison observations")
+    return preferred
 
 
 def latest_matching(
@@ -274,6 +425,43 @@ def select_metrics(
     return (Metric(label, latest_matching(observations, {})),)
 
 
+def attach_comparisons(
+    indicator_id: str,
+    metrics: Sequence[Metric],
+    comparisons: Sequence[ComparisonObservation],
+) -> Tuple[Metric, ...]:
+    """Pair each U.S. metric with its explicitly reviewed UN component."""
+
+    expected_components = COMPARISON_COMPONENTS.get(indicator_id)
+    if expected_components is None:
+        raise ValueError(f"No comparison-component rules for {indicator_id}")
+    if len(expected_components) != len(metrics):
+        raise ValueError(
+            f"Indicator {indicator_id} has {len(metrics)} U.S. metrics but "
+            f"{len(expected_components)} comparison-component rules"
+        )
+
+    attached = []
+    for metric, component in zip(metrics, expected_components):
+        matches = [item for item in comparisons if item.component == component]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Indicator {indicator_id} requires exactly one preferred "
+                f"comparison for {component!r}; found {len(matches)}"
+            )
+        attached.append(Metric(metric.label, metric.observation, matches[0]))
+
+    unexpected = sorted(
+        {item.component for item in comparisons} - set(expected_components)
+    )
+    if unexpected:
+        raise ValueError(
+            f"Indicator {indicator_id} has unexpected preferred comparison "
+            f"components: {', '.join(unexpected)}"
+        )
+    return tuple(attached)
+
+
 def one_value(values: Sequence[str], field_name: str, indicator_id: str) -> str:
     """Require a shared descriptive field to agree across selected rows."""
 
@@ -286,8 +474,14 @@ def one_value(values: Sequence[str], field_name: str, indicator_id: str) -> str:
     return unique.pop()
 
 
-def build_card(indicator_id: str, observations: Sequence[Observation]) -> Card:
+def build_card(
+    indicator_id: str,
+    observations: Sequence[Observation],
+    comparisons: Sequence[ComparisonObservation] = (),
+) -> Card:
     metrics = select_metrics(indicator_id, observations)
+    if comparisons:
+        metrics = attach_comparisons(indicator_id, metrics, comparisons)
     selected_rows = [metric.observation.row for metric in metrics]
     title = one_value(
         [row["indicator_title"] for row in selected_rows],
@@ -320,6 +514,51 @@ def build_card(indicator_id: str, observations: Sequence[Observation]) -> Card:
             }
         )
     )
+
+    comparison_status = ""
+    comparison_label = ""
+    comparison_source_url = ""
+    comparison_custodians: Tuple[str, ...] = ()
+    comparison_notes: Tuple[str, ...] = ()
+    selected_comparisons = [
+        metric.comparison for metric in metrics if metric.comparison is not None
+    ]
+    if selected_comparisons:
+        comparison_status = one_value(
+            [item.row["comparison_status"] for item in selected_comparisons],
+            "comparison_status",
+            indicator_id,
+        )
+        if comparison_status not in COMPARISON_LABELS:
+            raise ValueError(
+                f"Indicator {indicator_id} has unknown comparison status "
+                f"{comparison_status!r}"
+            )
+        comparison_label = COMPARISON_LABELS[comparison_status]
+        if indicator_id in {"15.a.1", "15.b.1"}:
+            comparison_label = "ODA component comparison"
+        comparison_urls = [
+            item.row["source_url"].strip() for item in selected_comparisons
+        ]
+        comparison_source_url = next(
+            (url.split(" | ", 1)[0] for url in comparison_urls if url), ""
+        )
+        comparison_custodians = tuple(
+            sorted(
+                {
+                    item.row["custodian"].strip()
+                    for item in selected_comparisons
+                    if item.row["custodian"].strip()
+                }
+            )
+        )
+        comparison_notes = tuple(
+            dict.fromkeys(
+                item.row["notes"].strip()
+                for item in selected_comparisons
+                if item.row["notes"].strip()
+            )
+        )
     goal = goal_for_indicator(indicator_id)
     return Card(
         indicator_id=indicator_id,
@@ -330,6 +569,11 @@ def build_card(indicator_id: str, observations: Sequence[Observation]) -> Card:
         source_url=first_source_url,
         validation_status=" / ".join(validation_statuses),
         warnings=warnings,
+        comparison_status=comparison_status,
+        comparison_label=comparison_label,
+        comparison_source_url=comparison_source_url,
+        comparison_custodians=comparison_custodians,
+        comparison_notes=comparison_notes,
     )
 
 
@@ -381,6 +625,54 @@ def format_value(value: Decimal, unit: str) -> Tuple[str, str]:
     return f"{rounded:,.2f}", ""
 
 
+def format_difference(metric: Metric) -> Tuple[str, str] | None:
+    """Return a signed U.S.-minus-UN difference in a meaningful unit.
+
+    This intentionally calculates an absolute difference, never a relative
+    percent change. A difference is omitted when the two units are not clearly
+    compatible.
+    """
+
+    comparison = metric.comparison
+    if comparison is None:
+        return None
+    # A cross-year subtraction can look like a source disagreement when it may
+    # simply reflect real change over time. Show both years, but only calculate
+    # a difference when the observations refer to the same year.
+    if metric.observation.year != comparison.year:
+        return None
+    us_unit = metric.observation.row["unit"].lower()
+    un_unit = comparison.row["unit"].lower()
+    if "percent" in us_unit and "percent" in un_unit:
+        difference_unit = "percentage points"
+    elif "per 100,000" in us_unit and "per 100,000" in un_unit:
+        difference_unit = "rate points"
+    elif "per 1,000" in us_unit and "per 1,000" in un_unit:
+        difference_unit = "rate points"
+    elif "million" in us_unit and "million" in un_unit:
+        if ("constant" in us_unit) != ("constant" in un_unit):
+            return None
+        if ("current" in us_unit) != ("current" in un_unit):
+            return None
+        difference_unit = "million USD"
+    else:
+        return None
+
+    difference = metric.observation.value - comparison.value
+    absolute = abs(difference)
+    if absolute == 0:
+        places = Decimal("0.1")
+    elif absolute < Decimal("0.01"):
+        places = Decimal("0.0001")
+    else:
+        places = Decimal("0.01")
+    rounded = difference.quantize(places, rounding=ROUND_HALF_UP)
+    text = f"{rounded:+,.4f}".rstrip("0").rstrip(".")
+    if rounded == 0:
+        text = "0"
+    return text, difference_unit
+
+
 def humanize(value: str) -> str:
     return value.replace("_", " ").strip().capitalize()
 
@@ -395,6 +687,38 @@ def render_metric(metric: Metric) -> str:
     raw_disaggregation = json.dumps(
         metric.observation.disaggregation, sort_keys=True, separators=(",", ":")
     )
+    comparison_html = ""
+    if metric.comparison is not None:
+        comparison = metric.comparison
+        un_display, un_suffix = format_value(
+            comparison.value, comparison.row["unit"]
+        )
+        difference = format_difference(metric)
+        difference_html = ""
+        if difference is not None:
+            difference_value, difference_unit = difference
+            difference_html = f"""
+                  <p class="comparison-difference"
+                     data-us-minus-un="{escape(metric.observation.value - comparison.value)}">
+                    U.S. − UN: <strong>{escape(difference_value)}</strong>
+                    {escape(difference_unit)}
+                  </p>"""
+        comparison_html = f"""
+              <div class="un-value-block"
+                   data-comparison-component="{escape(comparison.component)}"
+                   data-comparison-year="{comparison.year}"
+                   data-comparison-raw-value="{escape(comparison.row['value'])}"
+                   data-completeness-status="{escape(comparison.row['completeness_status'])}">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    {escape(un_display)}<span>{escape(un_suffix)}</span>
+                  </p>
+                  <p class="un-context">{comparison.year} · {escape(comparison.row['geography'])}</p>
+                </div>
+{difference_html}
+              </div>"""
+
     return f"""
             <section class="metric" aria-label="{escape(metric.label)}">
               <p class="metric-label">{escape(metric.label)}</p>
@@ -408,6 +732,7 @@ def render_metric(metric: Metric) -> str:
                  data-disaggregation="{escape(raw_disaggregation)}">
                 {metric.observation.year} · {escape(row['geography'])}
               </p>
+{comparison_html}
             </section>"""
 
 
@@ -439,9 +764,42 @@ def render_card(card: Card) -> str:
             <p>{escape(warning_text)}</p>
           </details>"""
 
+    comparison_header_html = ""
+    comparison_source_html = ""
+    comparison_note_html = ""
+    if card.comparison_status:
+        comparison_header_html = f"""
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>{escape(card.comparison_label)}</strong>
+        </div>"""
+        if card.comparison_source_url.startswith(("http://", "https://")):
+            comparison_database = (
+                f'<a href="{escape(card.comparison_source_url)}" target="_blank" '
+                'rel="noreferrer">UN SDG Global Database</a>'
+            )
+        else:
+            comparison_database = "UN SDG Global Database"
+        custodian_html = ""
+        if card.comparison_custodians:
+            custodian_html = (
+                '<small>Custodian: '
+                + escape(" / ".join(card.comparison_custodians))
+                + "</small>"
+            )
+        comparison_source_html = f"""
+          <p class="un-source"><span>UN</span><span>{comparison_database}{custodian_html}</span></p>"""
+        if card.comparison_notes:
+            comparison_note_html = f"""
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            {' '.join(f'<p>{escape(note)}</p>' for note in card.comparison_notes)}
+          </div>"""
+
     return f"""
       <article class="indicator-card" data-indicator-id="{escape(card.indicator_id)}"
                data-sdg-goal="{card.goal}" data-goal-color="{goal_color}"
+               data-comparison-status="{escape(card.comparison_status)}"
                style="--goal-color: {goal_color}; --goal-ink: {goal_ink}">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal {card.goal}">
@@ -457,6 +815,10 @@ def render_card(card: Card) -> str:
 
         <h2>{escape(card.title)}</h2>
 
+{comparison_header_html}
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics{metric_class}">
 {metrics_html}
         </div>
@@ -464,6 +826,8 @@ def render_card(card: Card) -> str:
         <footer class="card-footer">
           <p><span>Source</span>{source_html}</p>
           <p><span>Status</span>{escape(humanize(card.validation_status))}</p>
+{comparison_source_html}
+{comparison_note_html}
 {warning_html}
         </footer>
       </article>"""
@@ -490,6 +854,8 @@ def render_page(cards: Sequence[Card]) -> str:
       --status-bg: #e8f4ee;
       --review: #7a5211;
       --review-bg: #fff3d6;
+      --un-ink: #244f70;
+      --un-soft: #edf4f8;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
         "Segoe UI", sans-serif;
       color: var(--ink);
@@ -571,7 +937,7 @@ def render_page(cards: Sequence[Card]) -> str:
       position: relative;
       display: flex;
       min-width: 0;
-      min-height: 440px;
+      min-height: 620px;
       flex-direction: column;
       overflow: hidden;
       border: 1px solid var(--line);
@@ -623,21 +989,58 @@ def render_page(cards: Sequence[Card]) -> str:
 
     h2 {{
       min-height: 3.9em;
-      margin: 22px 24px 5px;
+      margin: 22px 24px 12px;
       font-size: 1rem;
       font-weight: 600;
       line-height: 1.35;
     }}
 
+    .comparison-heading {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 24px;
+      padding: 9px 11px;
+      border-radius: 8px;
+      background: var(--un-soft);
+      color: var(--un-ink);
+      font-size: 0.7rem;
+    }}
+
+    .comparison-heading span {{
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }}
+
+    .comparison-heading strong {{ text-align: right; }}
+
+    .us-estimate-label {{
+      margin: 17px 24px 0;
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }}
+
     .metrics {{
       display: grid;
       flex: 1;
-      align-content: center;
-      padding: 16px 24px 22px;
+      align-content: start;
+      padding: 13px 24px 22px;
     }}
 
     .metrics-multiple {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }}
-    .metrics-multiple .metric + .metric {{ border-left: 1px solid var(--line); padding-left: 22px; }}
+    .metrics-multiple .metric:nth-child(even) {{
+      border-left: 1px solid var(--line);
+      padding-left: 22px;
+    }}
+    .metrics-multiple .metric:nth-child(n+3) {{
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+    }}
 
     .metric-label {{
       min-height: 1.3em;
@@ -675,6 +1078,61 @@ def render_page(cards: Sequence[Card]) -> str:
       font-weight: 650;
     }}
 
+    .un-value-block {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 12px;
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid #d6e4ed;
+      border-radius: 9px;
+      background: #f7fafc;
+    }}
+
+    .un-value-label {{
+      margin: 0 0 3px;
+      color: var(--un-ink);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.045em;
+      text-transform: uppercase;
+    }}
+
+    .un-value {{
+      margin: 0;
+      color: #173d59;
+      font-size: 1.4rem;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      line-height: 1;
+    }}
+
+    .un-value > span {{ margin-left: 0.05em; font-size: 0.58em; }}
+    .un-context {{ margin: 5px 0 0; color: var(--muted); font-size: 0.68rem; }}
+
+    .comparison-difference {{
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.68rem;
+      line-height: 1.3;
+      text-align: right;
+    }}
+
+    .comparison-difference strong {{
+      display: block;
+      color: var(--ink);
+      font-size: 0.86rem;
+      font-variant-numeric: tabular-nums;
+    }}
+
+    .metrics-multiple .un-value-block {{
+      grid-template-columns: 1fr;
+      align-items: start;
+    }}
+
+    .metrics-multiple .comparison-difference {{ text-align: left; }}
+
     .card-footer {{
       margin-top: auto;
       padding: 18px 24px 22px;
@@ -688,6 +1146,23 @@ def render_page(cards: Sequence[Card]) -> str:
     .card-footer > p + p {{ margin-top: 7px; }}
     .card-footer > p > span {{ color: var(--muted); }}
     .card-footer a {{ overflow-wrap: anywhere; }}
+
+    .un-source small {{
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.68rem;
+    }}
+
+    .comparison-note {{
+      margin-top: 13px;
+      padding-top: 11px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+    }}
+
+    .comparison-note strong {{ color: #46535d; }}
+    .comparison-note p {{ margin: 5px 0 0; }}
 
     .warning {{
       margin-top: 13px;
@@ -734,7 +1209,12 @@ def render_page(cards: Sequence[Card]) -> str:
         border-top: 1px solid var(--line);
         border-left: 0;
       }}
+      .metrics-multiple .metric:nth-child(even) {{ border-left: 0; }}
       .metric-value, .metrics-multiple .metric-value {{ font-size: 2.35rem; }}
+      .comparison-heading {{ align-items: flex-start; flex-direction: column; }}
+      .comparison-heading strong {{ text-align: left; }}
+      .un-value-block {{ grid-template-columns: 1fr; align-items: start; }}
+      .comparison-difference {{ text-align: left; }}
       .page-footer {{ flex-direction: column; gap: 6px; }}
     }}
 
@@ -751,9 +1231,9 @@ def render_page(cards: Sequence[Card]) -> str:
       <div>
         <p class="eyebrow">United States · Latest automated observations</p>
         <h1>U.S. Sustainable Development Goal Indicators</h1>
-        <p class="intro">Automated estimates from publicly accessible data sources.
-          This preview shows the latest observation for each implemented indicator;
-          full historical series remain in the underlying CSV files.</p>
+        <p class="intro">U.S. estimates calculated from publicly accessible data,
+          with official UN comparisons where available. This preview shows reviewed
+          comparison measures alongside the latest automated U.S. observations.</p>
       </div>
       <div class="header-count" aria-label="{len(cards)} automated indicators shown">
         <strong>{len(cards)}</strong>
@@ -766,8 +1246,8 @@ def render_page(cards: Sequence[Card]) -> str:
     </section>
 
     <footer class="page-footer">
-      <span>Generated from data_processed/standardized</span>
-      <span>Latest available observation per series</span>
+      <span>Generated from standardized U.S. and reviewed UN comparison outputs</span>
+      <span>Latest preferred observation per matched series</span>
     </footer>
   </main>
 </body>
@@ -810,8 +1290,15 @@ def print_summary(cards: Sequence[Card]) -> None:
                 metric.observation.value, metric.observation.row["unit"]
             )
             rendered_metrics.append(
-                f"{metric.label}: {display}{suffix} ({metric.observation.year})"
+                f"{metric.label}: U.S. {display}{suffix} ({metric.observation.year})"
             )
+            if metric.comparison is not None:
+                un_display, un_suffix = format_value(
+                    metric.comparison.value, metric.comparison.row["unit"]
+                )
+                rendered_metrics[-1] += (
+                    f", UN {un_display}{un_suffix} ({metric.comparison.year})"
+                )
         print(f"  {card.indicator_id}: " + "; ".join(rendered_metrics))
 
 
@@ -819,7 +1306,10 @@ def main() -> None:
     cards = []
     for indicator_id in INDICATOR_ORDER:
         observations = read_observations(indicator_id, INPUT_FILES[indicator_id])
-        cards.append(build_card(indicator_id, observations))
+        comparisons = read_comparison_observations(
+            indicator_id, COMPARISON_FILES[indicator_id]
+        )
+        cards.append(build_card(indicator_id, observations, comparisons))
     write_atomically(render_page(cards))
     print_summary(cards)
 

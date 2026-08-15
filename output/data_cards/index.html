@@ -17,6 +17,8 @@
       --status-bg: #e8f4ee;
       --review: #7a5211;
       --review-bg: #fff3d6;
+      --un-ink: #244f70;
+      --un-soft: #edf4f8;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
         "Segoe UI", sans-serif;
       color: var(--ink);
@@ -98,7 +100,7 @@
       position: relative;
       display: flex;
       min-width: 0;
-      min-height: 440px;
+      min-height: 620px;
       flex-direction: column;
       overflow: hidden;
       border: 1px solid var(--line);
@@ -150,21 +152,58 @@
 
     h2 {
       min-height: 3.9em;
-      margin: 22px 24px 5px;
+      margin: 22px 24px 12px;
       font-size: 1rem;
       font-weight: 600;
       line-height: 1.35;
     }
 
+    .comparison-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 24px;
+      padding: 9px 11px;
+      border-radius: 8px;
+      background: var(--un-soft);
+      color: var(--un-ink);
+      font-size: 0.7rem;
+    }
+
+    .comparison-heading span {
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .comparison-heading strong { text-align: right; }
+
+    .us-estimate-label {
+      margin: 17px 24px 0;
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
     .metrics {
       display: grid;
       flex: 1;
-      align-content: center;
-      padding: 16px 24px 22px;
+      align-content: start;
+      padding: 13px 24px 22px;
     }
 
     .metrics-multiple { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
-    .metrics-multiple .metric + .metric { border-left: 1px solid var(--line); padding-left: 22px; }
+    .metrics-multiple .metric:nth-child(even) {
+      border-left: 1px solid var(--line);
+      padding-left: 22px;
+    }
+    .metrics-multiple .metric:nth-child(n+3) {
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+    }
 
     .metric-label {
       min-height: 1.3em;
@@ -202,6 +241,61 @@
       font-weight: 650;
     }
 
+    .un-value-block {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 12px;
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid #d6e4ed;
+      border-radius: 9px;
+      background: #f7fafc;
+    }
+
+    .un-value-label {
+      margin: 0 0 3px;
+      color: var(--un-ink);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.045em;
+      text-transform: uppercase;
+    }
+
+    .un-value {
+      margin: 0;
+      color: #173d59;
+      font-size: 1.4rem;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .un-value > span { margin-left: 0.05em; font-size: 0.58em; }
+    .un-context { margin: 5px 0 0; color: var(--muted); font-size: 0.68rem; }
+
+    .comparison-difference {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.68rem;
+      line-height: 1.3;
+      text-align: right;
+    }
+
+    .comparison-difference strong {
+      display: block;
+      color: var(--ink);
+      font-size: 0.86rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metrics-multiple .un-value-block {
+      grid-template-columns: 1fr;
+      align-items: start;
+    }
+
+    .metrics-multiple .comparison-difference { text-align: left; }
+
     .card-footer {
       margin-top: auto;
       padding: 18px 24px 22px;
@@ -215,6 +309,23 @@
     .card-footer > p + p { margin-top: 7px; }
     .card-footer > p > span { color: var(--muted); }
     .card-footer a { overflow-wrap: anywhere; }
+
+    .un-source small {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.68rem;
+    }
+
+    .comparison-note {
+      margin-top: 13px;
+      padding-top: 11px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    .comparison-note strong { color: #46535d; }
+    .comparison-note p { margin: 5px 0 0; }
 
     .warning {
       margin-top: 13px;
@@ -261,7 +372,12 @@
         border-top: 1px solid var(--line);
         border-left: 0;
       }
+      .metrics-multiple .metric:nth-child(even) { border-left: 0; }
       .metric-value, .metrics-multiple .metric-value { font-size: 2.35rem; }
+      .comparison-heading { align-items: flex-start; flex-direction: column; }
+      .comparison-heading strong { text-align: left; }
+      .un-value-block { grid-template-columns: 1fr; align-items: start; }
+      .comparison-difference { text-align: left; }
       .page-footer { flex-direction: column; gap: 6px; }
     }
 
@@ -278,9 +394,9 @@
       <div>
         <p class="eyebrow">United States · Latest automated observations</p>
         <h1>U.S. Sustainable Development Goal Indicators</h1>
-        <p class="intro">Automated estimates from publicly accessible data sources.
-          This preview shows the latest observation for each implemented indicator;
-          full historical series remain in the underlying CSV files.</p>
+        <p class="intro">U.S. estimates calculated from publicly accessible data,
+          with official UN comparisons where available. This preview shows reviewed
+          comparison measures alongside the latest automated U.S. observations.</p>
       </div>
       <div class="header-count" aria-label="13 automated indicators shown">
         <strong>13</strong>
@@ -292,6 +408,7 @@
 
       <article class="indicator-card" data-indicator-id="3.1.2"
                data-sdg-goal="3" data-goal-color="#4C9F38"
+               data-comparison-status="directly_comparable"
                style="--goal-color: #4C9F38; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 3">
@@ -307,6 +424,14 @@
 
         <h2>Proportion of births attended by skilled health personnel</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Comparable measure</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics">
 
             <section class="metric" aria-label="Latest observation">
@@ -321,12 +446,34 @@
                  data-disaggregation="{}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="national"
+                   data-comparison-year="2023"
+                   data-comparison-raw-value="98.8"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    98.8<span>%</span>
+                  </p>
+                  <p class="un-context">2023 · United States of America</p>
+                </div>
+
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://ftp.cdc.gov/pub/Health_Statistics/NCHS/Datasets/DVS/natality/Nat2022us.zip" target="_blank" rel="noreferrer">Centers for Disease Control and Prevention, National Center for Health Statistics</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=SH_STA_BRTC&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: United Nations Children&#x27;s Fund (UNICEF)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>Country-reported skilled birth-attendance percentage; the API source may be an MNCH source code.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -337,6 +484,7 @@
 
       <article class="indicator-card" data-indicator-id="3.4.2"
                data-sdg-goal="3" data-goal-color="#4C9F38"
+               data-comparison-status="comparable_with_methodology_difference"
                style="--goal-color: #4C9F38; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 3">
@@ -352,6 +500,14 @@
 
         <h2>Suicide mortality rate</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Methodology differs</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics">
 
             <section class="metric" aria-label="Latest observation">
@@ -366,12 +522,34 @@
                  data-disaggregation="{}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="both_sexes"
+                   data-comparison-year="2021"
+                   data-comparison-raw-value="15.6"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    15.60<span></span>
+                  </p>
+                  <p class="un-context">2021 · United States of America</p>
+                </div>
+
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://wonder.cdc.gov/controller/datarequest/D158" target="_blank" rel="noreferrer">Centers for Disease Control and Prevention, National Center for Health Statistics</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=SH_STA_SCIDE&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: World Health Organization (WHO)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>WHO country-adjusted Global Health Estimates are compared with the project&#x27;s crude NVSS rate.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -382,6 +560,7 @@
 
       <article class="indicator-card" data-indicator-id="3.6.1"
                data-sdg-goal="3" data-goal-color="#4C9F38"
+               data-comparison-status="comparable_with_methodology_difference"
                style="--goal-color: #4C9F38; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 3">
@@ -397,6 +576,14 @@
 
         <h2>Death rate due to road traffic injuries</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Methodology differs</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics">
 
             <section class="metric" aria-label="Latest observation">
@@ -411,12 +598,34 @@
                  data-disaggregation="{}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="national_rate"
+                   data-comparison-year="2021"
+                   data-comparison-raw-value="14.2"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    14.20<span></span>
+                  </p>
+                  <p class="un-context">2021 · United States of America</p>
+                </div>
+
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://wonder.cdc.gov/controller/datarequest/D158" target="_blank" rel="noreferrer">Centers for Disease Control and Prevention, National Center for Health Statistics</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=SH_STA_TRAF&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: World Health Organization (WHO)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>The UN road-safety rate may combine police, health, transport, and adjustment processes; the separate death-count series is not selected.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -427,6 +636,7 @@
 
       <article class="indicator-card" data-indicator-id="3.7.2"
                data-sdg-goal="3" data-goal-color="#4C9F38"
+               data-comparison-status="directly_comparable"
                style="--goal-color: #4C9F38; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 3">
@@ -442,6 +652,14 @@
 
         <h2>Adolescent birth rate (aged 10-14 years; aged 15-19 years) per 1,000 women in that age group</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Comparable measure</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics metrics-multiple">
 
             <section class="metric" aria-label="Ages 15-19">
@@ -456,6 +674,21 @@
                  data-disaggregation="{&quot;age&quot;:&quot;15-19&quot;}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="ages_15_19"
+                   data-comparison-year="2022"
+                   data-comparison-raw-value="13.5"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    13.50<span></span>
+                  </p>
+                  <p class="un-context">2022 · United States of America</p>
+                </div>
+
+              </div>
             </section>
 
             <section class="metric" aria-label="Ages 10-14">
@@ -470,12 +703,34 @@
                  data-disaggregation="{&quot;age&quot;:&quot;10-14&quot;}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="ages_10_14"
+                   data-comparison-year="2022"
+                   data-comparison-raw-value="0.2"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    0.20<span></span>
+                  </p>
+                  <p class="un-context">2022 · United States of America</p>
+                </div>
+
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://ftp.cdc.gov/pub/Health_Statistics/NCHS/Datasets/DVS/natality/Nat2022us.zip" target="_blank" rel="noreferrer">Centers for Disease Control and Prevention, National Center for Health Statistics / U.S. Census Bureau</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=SP_DYN_ADKL&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: United Nations Department of Economic and Social Affairs, Population Division</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>Age-specific adolescent birth rate for women ages 15-19.</p> <p>Age-specific adolescent birth rate for women ages 10-14.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -486,6 +741,7 @@
 
       <article class="indicator-card" data-indicator-id="3.9.3"
                data-sdg-goal="3" data-goal-color="#4C9F38"
+               data-comparison-status="comparable_with_methodology_difference"
                style="--goal-color: #4C9F38; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 3">
@@ -501,6 +757,14 @@
 
         <h2>Mortality rate attributed to unintentional poisoning</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Methodology differs</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics">
 
             <section class="metric" aria-label="Latest observation">
@@ -515,12 +779,34 @@
                  data-disaggregation="{}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="both_sexes"
+                   data-comparison-year="2021"
+                   data-comparison-raw-value="0.5"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    0.50<span></span>
+                  </p>
+                  <p class="un-context">2021 · United States of America</p>
+                </div>
+
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://wonder.cdc.gov/controller/datarequest/D158" target="_blank" rel="noreferrer">Centers for Disease Control and Prevention, National Center for Health Statistics</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=SH_STA_POISN&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: World Health Organization (WHO)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>WHO country-adjusted Global Health Estimates are compared with the project&#x27;s crude NVSS rate and current ICD selection.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -531,6 +817,7 @@
 
       <article class="indicator-card" data-indicator-id="4.2.2"
                data-sdg-goal="4" data-goal-color="#C5192D"
+               data-comparison-status="comparable_with_methodology_difference"
                style="--goal-color: #C5192D; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 4">
@@ -546,6 +833,14 @@
 
         <h2>Percentage of 5-year-olds enrolled in organized learning</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Methodology differs</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics">
 
             <section class="metric" aria-label="National">
@@ -560,12 +855,34 @@
                  data-disaggregation="{}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="both_sexes"
+                   data-comparison-year="2022"
+                   data-comparison-raw-value="86.50675"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    86.51<span>%</span>
+                  </p>
+                  <p class="un-context">2022 · United States of America</p>
+                </div>
+
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://www2.census.gov/programs-surveys/cps/datasets/2024/supp/oct24pub.zip" target="_blank" rel="noreferrer">U.S. Census Bureau / National Center for Education Statistics</a></p>
           <p><span>Status</span>Not archive validated</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=SE_PRE_PARTN&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: UNESCO Institute for Statistics (UIS)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>The UOE country submission is compared with the project&#x27;s weighted CPS age-five estimate.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -576,6 +893,7 @@
 
       <article class="indicator-card" data-indicator-id="8.5.2"
                data-sdg-goal="8" data-goal-color="#A21942"
+               data-comparison-status="directly_comparable"
                style="--goal-color: #A21942; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 8">
@@ -591,6 +909,14 @@
 
         <h2>Unemployment rate, by sex, age and persons with disabilities</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Comparable measure</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics metrics-multiple">
 
             <section class="metric" aria-label="Men with disability">
@@ -605,6 +931,26 @@
                  data-disaggregation="{&quot;disability&quot;:&quot;With disability&quot;,&quot;sex&quot;:&quot;Male&quot;}">
                 2025 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="male_with_disability"
+                   data-comparison-year="2025"
+                   data-comparison-raw-value="8.48"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    8.48<span>%</span>
+                  </p>
+                  <p class="un-context">2025 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="-0.08">
+                    U.S. − UN: <strong>-0.08</strong>
+                    percentage points
+                  </p>
+              </div>
             </section>
 
             <section class="metric" aria-label="Women with disability">
@@ -619,6 +965,26 @@
                  data-disaggregation="{&quot;disability&quot;:&quot;With disability&quot;,&quot;sex&quot;:&quot;Female&quot;}">
                 2025 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="female_with_disability"
+                   data-comparison-year="2025"
+                   data-comparison-raw-value="8.09"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    8.09<span>%</span>
+                  </p>
+                  <p class="un-context">2025 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="0.01">
+                    U.S. − UN: <strong>+0.01</strong>
+                    percentage points
+                  </p>
+              </div>
             </section>
 
             <section class="metric" aria-label="Men without disability">
@@ -633,6 +999,26 @@
                  data-disaggregation="{&quot;disability&quot;:&quot;No disability&quot;,&quot;sex&quot;:&quot;Male&quot;}">
                 2025 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="male_without_disability"
+                   data-comparison-year="2025"
+                   data-comparison-raw-value="4.15"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    4.15<span>%</span>
+                  </p>
+                  <p class="un-context">2025 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="0.05">
+                    U.S. − UN: <strong>+0.05</strong>
+                    percentage points
+                  </p>
+              </div>
             </section>
 
             <section class="metric" aria-label="Women without disability">
@@ -647,12 +1033,39 @@
                  data-disaggregation="{&quot;disability&quot;:&quot;No disability&quot;,&quot;sex&quot;:&quot;Female&quot;}">
                 2025 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="female_without_disability"
+                   data-comparison-year="2025"
+                   data-comparison-raw-value="3.97"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    3.97<span>%</span>
+                  </p>
+                  <p class="un-context">2025 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="0.03">
+                    U.S. − UN: <strong>+0.03</strong>
+                    percentage points
+                  </p>
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://api.bls.gov/publicAPI/v2/timeseries/data/" target="_blank" rel="noreferrer">U.S. Bureau of Labor Statistics</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=SL_TLF_UEMDIS_19ICLS&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: International Labour Organization (ILO)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>Current 19th-ICLS series; the U.S. source footnote records a minimum age of 16.</p> <p>Current 19th-ICLS series; PWD is UNSD&#x27;s code for persons without disability.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -663,6 +1076,7 @@
 
       <article class="indicator-card" data-indicator-id="8.6.1"
                data-sdg-goal="8" data-goal-color="#A21942"
+               data-comparison-status="comparable_with_methodology_difference"
                style="--goal-color: #A21942; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 8">
@@ -678,6 +1092,14 @@
 
         <h2>Percentage of youth ages 16-24 who are not enrolled in school and not employed</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Methodology differs</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics">
 
             <section class="metric" aria-label="Latest observation">
@@ -692,12 +1114,39 @@
                  data-disaggregation="{}">
                 2025 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="both_sexes_ages_15_24"
+                   data-comparison-year="2025"
+                   data-comparison-raw-value="11.59"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    11.59<span>%</span>
+                  </p>
+                  <p class="un-context">2025 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="2.91">
+                    U.S. − UN: <strong>+2.91</strong>
+                    percentage points
+                  </p>
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://downloadt.bls.gov/pub/time.series/ln/ln.data.1.AllData" target="_blank" rel="noreferrer">U.S. Bureau of Labor Statistics</a></p>
           <p><span>Status</span>Not archive validated</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=SL_TLF_NEET_19ICLS&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: International Labour Organization (ILO)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>Official NEET measure differs from the legacy U.S. ages 16-24 not-enrolled/not-employed proxy.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -708,6 +1157,7 @@
 
       <article class="indicator-card" data-indicator-id="8.a.1"
                data-sdg-goal="8" data-goal-color="#A21942"
+               data-comparison-status="directly_comparable"
                style="--goal-color: #A21942; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 8">
@@ -723,6 +1173,14 @@
 
         <h2>Aid for Trade commitments and disbursements</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Comparable measure</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics metrics-multiple">
 
             <section class="metric" aria-label="Commitments">
@@ -737,6 +1195,26 @@
                  data-disaggregation="{&quot;flow&quot;:&quot;Commitments&quot;}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="donor_commitments"
+                   data-comparison-year="2024"
+                   data-comparison-raw-value="4995.96"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    4,995.96<span></span>
+                  </p>
+                  <p class="un-context">2024 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="7.935421">
+                    U.S. − UN: <strong>+7.94</strong>
+                    million USD
+                  </p>
+              </div>
             </section>
 
             <section class="metric" aria-label="Disbursements">
@@ -751,12 +1229,39 @@
                  data-disaggregation="{&quot;flow&quot;:&quot;Disbursements&quot;}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="donor_disbursements"
+                   data-comparison-year="2024"
+                   data-comparison-raw-value="3125.24"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    3,125.24<span></span>
+                  </p>
+                  <p class="un-context">2024 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="9.196654">
+                    U.S. − UN: <strong>+9.2</strong>
+                    million USD
+                  </p>
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://sdmx.oecd.org/dcd-public/rest/data/OECD.DCD.FSD,DSD_CRS@DF_CRS,1.6/USA.DPGC.210%2B220%2B230%2B240%2B250%2B310%2B320%2B331%2B332.100._T._T.C%2BD.Q._T..USD?startPeriod=2002&amp;endPeriod=2024&amp;dimensionAtObservation=AllDimensions&amp;format=csvfilewithlabels" target="_blank" rel="noreferrer">Organisation for Economic Co-operation and Development (OECD)</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=DC_TOF_TRDCMDL&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: Organisation for Economic Co-operation and Development (OECD)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>United States donor Aid for Trade commitments in millions of constant 2024 USD.</p> <p>United States donor Aid for Trade gross disbursements in millions of constant 2024 USD.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -767,6 +1272,7 @@
 
       <article class="indicator-card" data-indicator-id="10.b.1"
                data-sdg-goal="10" data-goal-color="#DD1367"
+               data-comparison-status="directly_comparable"
                style="--goal-color: #DD1367; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 10">
@@ -782,6 +1288,14 @@
 
         <h2>Total resource flows for development (e.g. official development assistance, foreign direct investment and other flows)</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Comparable measure</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics">
 
             <section class="metric" aria-label="Latest observation">
@@ -796,12 +1310,39 @@
                  data-disaggregation="{}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="donor_assistance"
+                   data-comparison-year="2024"
+                   data-comparison-raw-value="231645.76"
+                   data-completeness-status="complete">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    231,645.76<span></span>
+                  </p>
+                  <p class="un-context">2024 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="2009.48">
+                    U.S. − UN: <strong>+2,009.48</strong>
+                    million USD
+                  </p>
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://sdmx.oecd.org/public/rest/data/OECD.DCD.FSD,DSD_DAC1@DF_DAC1,1.7/USA._Z.1%2B5%2B1010..1140.USD.V?startPeriod=2000&amp;endPeriod=2024&amp;dimensionAtObservation=AllDimensions&amp;format=csvfilewithlabels" target="_blank" rel="noreferrer">Organisation for Economic Co-operation and Development (OECD)</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=DC_TRF_TOTDL&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: Organisation for Economic Co-operation and Development (OECD)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>The reviewed 2025 observation appears incomplete; prefer the latest reviewed-complete year.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -812,6 +1353,7 @@
 
       <article class="indicator-card" data-indicator-id="15.a.1"
                data-sdg-goal="15" data-goal-color="#56C02B"
+               data-comparison-status="partial_component_comparison"
                style="--goal-color: #56C02B; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 15">
@@ -827,6 +1369,14 @@
 
         <h2>(a) Official development assistance on conservation and sustainable use of biodiversity; and (b) revenue generated and finance mobilized from biodiversity-relevant economic instruments</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>ODA component comparison</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics">
 
             <section class="metric" aria-label="Latest observation">
@@ -841,12 +1391,39 @@
                  data-disaggregation="{}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="donor_biodiversity_oda_component_a"
+                   data-comparison-year="2024"
+                   data-comparison-raw-value="1487.776171"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    1,487.78<span></span>
+                  </p>
+                  <p class="un-context">2024 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="1.007576">
+                    U.S. − UN: <strong>+1.01</strong>
+                    million USD
+                  </p>
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://sdmx.oecd.org/dcd-public/rest/data/OECD.DCD.FSD,DSD_RIOMRKR@DF_RIOMARKERS,1.6/USA.DPGC.1000.100.2.10.1%2B2.C.Q._T..USD?startPeriod=2006&amp;endPeriod=2024&amp;dimensionAtObservation=AllDimensions&amp;format=csvfilewithlabels" target="_blank" rel="noreferrer">Organisation for Economic Co-operation and Development (OECD)</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=DC_ODA_BDVDL&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: Organisation for Economic Co-operation and Development (OECD)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>Comparable only to component (a), donor biodiversity-related ODA; component (b) is not present in this series.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -857,6 +1434,7 @@
 
       <article class="indicator-card" data-indicator-id="15.b.1"
                data-sdg-goal="15" data-goal-color="#56C02B"
+               data-comparison-status="partial_component_comparison"
                style="--goal-color: #56C02B; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 15">
@@ -872,6 +1450,14 @@
 
         <h2>(a) Official development assistance on conservation and sustainable use of biodiversity; and (b) revenue generated and finance mobilized from biodiversity-relevant economic instruments</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>ODA component comparison</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics">
 
             <section class="metric" aria-label="Latest observation">
@@ -886,12 +1472,39 @@
                  data-disaggregation="{}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="donor_biodiversity_oda_component_a"
+                   data-comparison-year="2024"
+                   data-comparison-raw-value="1487.776171"
+                   data-completeness-status="not_assessed">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    1,487.78<span></span>
+                  </p>
+                  <p class="un-context">2024 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="1.007576">
+                    U.S. − UN: <strong>+1.01</strong>
+                    million USD
+                  </p>
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://sdmx.oecd.org/dcd-public/rest/data/OECD.DCD.FSD,DSD_RIOMRKR@DF_RIOMARKERS,1.6/USA.DPGC.1000.100.2.10.1%2B2.C.Q._T..USD?startPeriod=2006&amp;endPeriod=2024&amp;dimensionAtObservation=AllDimensions&amp;format=csvfilewithlabels" target="_blank" rel="noreferrer">Organisation for Economic Co-operation and Development (OECD)</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=DC_ODA_BDVDL&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: Organisation for Economic Co-operation and Development (OECD)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>Repeat of 15.a.1 for component (a); both indicators intentionally share one retrieved series.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -902,6 +1515,7 @@
 
       <article class="indicator-card" data-indicator-id="17.2.1"
                data-sdg-goal="17" data-goal-color="#19486A"
+               data-comparison-status="comparable_with_methodology_difference"
                style="--goal-color: #19486A; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 17">
@@ -917,6 +1531,14 @@
 
         <h2>Net official development assistance, total and to least developed countries, as a proportion of OECD Development Assistance Committee donors&#x27; gross national income (GNI)</h2>
 
+
+        <div class="comparison-heading">
+          <span>Official UN comparison</span>
+          <strong>Methodology differs</strong>
+        </div>
+
+        <p class="us-estimate-label">U.S. public-data estimate</p>
+
         <div class="metrics metrics-multiple">
 
             <section class="metric" aria-label="Total ODA">
@@ -931,6 +1553,26 @@
                  data-disaggregation="{&quot;component&quot;:&quot;Total ODA&quot;}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="total_oda_gni_grant_equivalent"
+                   data-comparison-year="2024"
+                   data-comparison-raw-value="0.225381"
+                   data-completeness-status="complete">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    0.225<span>%</span>
+                  </p>
+                  <p class="un-context">2024 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="-0.0004768729338714958463323336">
+                    U.S. − UN: <strong>-0.0005</strong>
+                    percentage points
+                  </p>
+              </div>
             </section>
 
             <section class="metric" aria-label="Least developed countries">
@@ -945,12 +1587,39 @@
                  data-disaggregation="{&quot;component&quot;:&quot;Least developed countries&quot;}">
                 2024 · United States
               </p>
+
+              <div class="un-value-block"
+                   data-comparison-component="ldc_oda_gni_net"
+                   data-comparison-year="2024"
+                   data-comparison-raw-value="0.05452"
+                   data-completeness-status="complete">
+                <div>
+                  <p class="un-value-label">UN reported value</p>
+                  <p class="un-value">
+                    0.055<span>%</span>
+                  </p>
+                  <p class="un-context">2024 · United States of America</p>
+                </div>
+
+                  <p class="comparison-difference"
+                     data-us-minus-un="0.00001921351699593183727679561">
+                    U.S. − UN: <strong>0</strong>
+                    percentage points
+                  </p>
+              </div>
             </section>
         </div>
 
         <footer class="card-footer">
           <p><span>Source</span><a href="https://sdmx.oecd.org/public/rest/data/OECD.DCD.FSD,DSD_DAC1@DF_DAC1,1.7/USA._Z.1%2B5%2B1010..1140.USD.V?startPeriod=2000&amp;endPeriod=2024&amp;dimensionAtObservation=AllDimensions&amp;format=csvfilewithlabels" target="_blank" rel="noreferrer">Organisation for Economic Co-operation and Development (OECD)</a></p>
           <p><span>Status</span>Current methodology verified</p>
+
+          <p class="un-source"><span>UN</span><span><a href="https://unstats.un.org/SDGAPI/v1/sdg/Series/Data?seriesCode=DC_ODA_TOTGGE&amp;areaCode=840" target="_blank" rel="noreferrer">UN SDG Global Database</a><small>Custodian: Organisation for Economic Co-operation and Development (OECD)</small></span></p>
+
+          <div class="comparison-note">
+            <strong>Comparison note</strong>
+            <p>Current UN total uses grant equivalent after 2018; the project&#x27;s U.S. total deliberately uses net ODA.</p> <p>Net ODA to least developed countries including imputed multilateral ODA; directly comparable within this mixed-method indicator.</p>
+          </div>
 
           <details class="warning">
             <summary>Methodology / data note</summary>
@@ -961,8 +1630,8 @@
     </section>
 
     <footer class="page-footer">
-      <span>Generated from data_processed/standardized</span>
-      <span>Latest available observation per series</span>
+      <span>Generated from standardized U.S. and reviewed UN comparison outputs</span>
+      <span>Latest preferred observation per matched series</span>
     </footer>
   </main>
 </body>
