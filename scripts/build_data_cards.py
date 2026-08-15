@@ -26,8 +26,10 @@ STANDARDIZED_DIR = PROJECT_ROOT / "data_processed" / "standardized"
 OUTPUT_PATH = PROJECT_ROOT / "output" / "data_cards" / "index.html"
 
 INDICATOR_ORDER = (
+    "3.1.2",
     "3.4.2",
     "3.6.1",
+    "3.7.2",
     "3.9.3",
     "4.2.2",
     "8.5.2",
@@ -46,14 +48,26 @@ INPUT_FILES = {
 }
 
 # Only presentation rules live here. The observations themselves always come
-# from the standardized CSVs. The colors follow the familiar SDG goal palette.
+# from the standardized CSVs. This is the single source of truth for the
+# official United Nations SDG goal colors (web/RGB hex values) used by cards.
 GOAL_COLORS = {
-    "3": "#4c9f38",
-    "4": "#c5192d",
-    "8": "#a21942",
-    "10": "#dd1367",
-    "15": "#56c02b",
-    "17": "#19486a",
+    "1": "#E5243B",
+    "2": "#DDA63A",
+    "3": "#4C9F38",
+    "4": "#C5192D",
+    "5": "#FF3A21",
+    "6": "#26BDE2",
+    "7": "#FCC30B",
+    "8": "#A21942",
+    "9": "#FD6925",
+    "10": "#DD1367",
+    "11": "#FD9D24",
+    "12": "#BF8B2E",
+    "13": "#3F7E44",
+    "14": "#0A97D9",
+    "15": "#56C02B",
+    "16": "#00689D",
+    "17": "#19486A",
 }
 
 REQUIRED_FIELDS = {
@@ -242,6 +256,17 @@ def select_metrics(
                 ),
             ),
         )
+    if indicator_id == "3.7.2":
+        return (
+            Metric(
+                "Ages 15-19",
+                latest_matching(observations, {"age": "15-19"}),
+            ),
+            Metric(
+                "Ages 10-14",
+                latest_matching(observations, {"age": "10-14"}),
+            ),
+        )
 
     # An empty disaggregation object is the national headline series. This is
     # especially important for 4.2.2, whose CSV also contains male/female rows.
@@ -295,7 +320,7 @@ def build_card(indicator_id: str, observations: Sequence[Observation]) -> Card:
             }
         )
     )
-    goal = indicator_id.split(".", 1)[0]
+    goal = goal_for_indicator(indicator_id)
     return Card(
         indicator_id=indicator_id,
         goal=goal,
@@ -306,6 +331,40 @@ def build_card(indicator_id: str, observations: Sequence[Observation]) -> Card:
         validation_status=" / ".join(validation_statuses),
         warnings=warnings,
     )
+
+
+def goal_for_indicator(indicator_id: str) -> str:
+    """Derive and validate the SDG goal number from an indicator ID."""
+
+    goal = indicator_id.split(".", 1)[0]
+    if goal not in GOAL_COLORS:
+        raise ValueError(
+            f"Indicator {indicator_id!r} does not begin with an SDG goal from 1 to 17"
+        )
+    return goal
+
+
+def readable_text_color(background: str) -> str:
+    """Choose dark or white text for readable labels on an SDG goal color."""
+
+    red, green, blue = (
+        int(background[index : index + 2], 16) / 255
+        for index in (1, 3, 5)
+    )
+
+    def linearize(channel: float) -> float:
+        if channel <= 0.04045:
+            return channel / 12.92
+        return ((channel + 0.055) / 1.055) ** 2.4
+
+    luminance = (
+        0.2126 * linearize(red)
+        + 0.7152 * linearize(green)
+        + 0.0722 * linearize(blue)
+    )
+    contrast_with_dark = (luminance + 0.05) / 0.05
+    contrast_with_white = 1.05 / (luminance + 0.05)
+    return "#15212b" if contrast_with_dark >= contrast_with_white else "#ffffff"
 
 
 def format_value(value: Decimal, unit: str) -> Tuple[str, str]:
@@ -353,7 +412,8 @@ def render_metric(metric: Metric) -> str:
 
 
 def render_card(card: Card) -> str:
-    goal_color = GOAL_COLORS.get(card.goal, "#4b5563")
+    goal_color = GOAL_COLORS[card.goal]
+    goal_ink = readable_text_color(goal_color)
     metrics_html = "\n".join(render_metric(metric) for metric in card.metrics)
     metric_class = " metrics-multiple" if len(card.metrics) > 1 else ""
     status_class = (
@@ -381,10 +441,11 @@ def render_card(card: Card) -> str:
 
     return f"""
       <article class="indicator-card" data-indicator-id="{escape(card.indicator_id)}"
-               style="--goal-color: {goal_color}">
+               data-sdg-goal="{card.goal}" data-goal-color="{goal_color}"
+               style="--goal-color: {goal_color}; --goal-ink: {goal_ink}">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal {card.goal}">
-            <span>SDG</span>
+            <span>Goal</span>
             <strong>{card.goal}</strong>
           </div>
           <div class="indicator-label">
@@ -416,7 +477,7 @@ def render_page(cards: Sequence[Card]) -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>U.S. SDG Data Cards</title>
+  <title>U.S. Sustainable Development Goal Indicators</title>
   <style>
     :root {{
       --page: #f4f6f8;
@@ -514,24 +575,17 @@ def render_page(cards: Sequence[Card]) -> str:
       flex-direction: column;
       overflow: hidden;
       border: 1px solid var(--line);
+      border-top: 6px solid var(--goal-color);
       border-radius: 14px;
       background: var(--surface);
       box-shadow: 0 9px 24px rgba(24, 38, 49, 0.06);
-    }}
-
-    .indicator-card::before {{
-      position: absolute;
-      inset: 0 auto 0 0;
-      width: 7px;
-      background: var(--goal-color);
-      content: "";
     }}
 
     .card-header {{
       display: flex;
       align-items: center;
       gap: 13px;
-      padding: 22px 24px 0 29px;
+      padding: 21px 24px 0;
     }}
 
     .goal-mark {{
@@ -540,9 +594,9 @@ def render_page(cards: Sequence[Card]) -> str:
       height: 56px;
       flex: 0 0 auto;
       place-content: center;
-      border-radius: 50%;
+      border-radius: 10px;
       background: var(--goal-color);
-      color: #fff;
+      color: var(--goal-ink);
       text-align: center;
     }}
 
@@ -569,7 +623,7 @@ def render_page(cards: Sequence[Card]) -> str:
 
     h2 {{
       min-height: 3.9em;
-      margin: 22px 28px 5px 29px;
+      margin: 22px 24px 5px;
       font-size: 1rem;
       font-weight: 600;
       line-height: 1.35;
@@ -579,7 +633,7 @@ def render_page(cards: Sequence[Card]) -> str:
       display: grid;
       flex: 1;
       align-content: center;
-      padding: 16px 28px 22px 29px;
+      padding: 16px 24px 22px;
     }}
 
     .metrics-multiple {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }}
@@ -623,7 +677,7 @@ def render_page(cards: Sequence[Card]) -> str:
 
     .card-footer {{
       margin-top: auto;
-      padding: 18px 28px 22px 29px;
+      padding: 18px 24px 22px;
       border-top: 1px solid var(--line);
       background: #fafbfc;
       font-size: 0.77rem;
@@ -695,11 +749,11 @@ def render_page(cards: Sequence[Card]) -> str:
   <main class="page-shell">
     <header class="page-header">
       <div>
-        <p class="eyebrow">United States · Automated indicators</p>
-        <h1>SDG data cards</h1>
-        <p class="intro">A latest-observation view of the project’s standardized,
-          reproducible indicator outputs. Full historical series remain in the
-          underlying CSV files.</p>
+        <p class="eyebrow">United States · Latest automated observations</p>
+        <h1>U.S. Sustainable Development Goal Indicators</h1>
+        <p class="intro">Automated estimates from publicly accessible data sources.
+          This preview shows the latest observation for each implemented indicator;
+          full historical series remain in the underlying CSV files.</p>
       </div>
       <div class="header-count" aria-label="{len(cards)} automated indicators shown">
         <strong>{len(cards)}</strong>

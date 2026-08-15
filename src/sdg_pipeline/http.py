@@ -112,6 +112,7 @@ def request_bytes(
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     retry_delay_seconds: float = DEFAULT_RETRY_DELAY_SECONDS,
     sleep: Callable[[float], None] = time.sleep,
+    open_request: Callable[..., object] | None = None,
 ) -> Tuple[bytes, str]:
     """Return an HTTP body, retrying only clearly temporary failures.
 
@@ -126,10 +127,11 @@ def request_bytes(
         raise ValueError("retry_delay_seconds cannot be negative")
 
     safe_url = _safe_display_url(display_url)
+    executor = open_request or urllib.request.urlopen
     for attempt in range(1, max_attempts + 1):
         last_error: BaseException
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with executor(request, timeout=timeout) as response:
                 return response.read(), response.headers.get_content_type()
         except urllib.error.HTTPError as caught_error:
             last_error = caught_error

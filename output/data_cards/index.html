@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>U.S. SDG Data Cards</title>
+  <title>U.S. Sustainable Development Goal Indicators</title>
   <style>
     :root {
       --page: #f4f6f8;
@@ -102,24 +102,17 @@
       flex-direction: column;
       overflow: hidden;
       border: 1px solid var(--line);
+      border-top: 6px solid var(--goal-color);
       border-radius: 14px;
       background: var(--surface);
       box-shadow: 0 9px 24px rgba(24, 38, 49, 0.06);
-    }
-
-    .indicator-card::before {
-      position: absolute;
-      inset: 0 auto 0 0;
-      width: 7px;
-      background: var(--goal-color);
-      content: "";
     }
 
     .card-header {
       display: flex;
       align-items: center;
       gap: 13px;
-      padding: 22px 24px 0 29px;
+      padding: 21px 24px 0;
     }
 
     .goal-mark {
@@ -128,9 +121,9 @@
       height: 56px;
       flex: 0 0 auto;
       place-content: center;
-      border-radius: 50%;
+      border-radius: 10px;
       background: var(--goal-color);
-      color: #fff;
+      color: var(--goal-ink);
       text-align: center;
     }
 
@@ -157,7 +150,7 @@
 
     h2 {
       min-height: 3.9em;
-      margin: 22px 28px 5px 29px;
+      margin: 22px 24px 5px;
       font-size: 1rem;
       font-weight: 600;
       line-height: 1.35;
@@ -167,7 +160,7 @@
       display: grid;
       flex: 1;
       align-content: center;
-      padding: 16px 28px 22px 29px;
+      padding: 16px 24px 22px;
     }
 
     .metrics-multiple { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
@@ -211,7 +204,7 @@
 
     .card-footer {
       margin-top: auto;
-      padding: 18px 28px 22px 29px;
+      padding: 18px 24px 22px;
       border-top: 1px solid var(--line);
       background: #fafbfc;
       font-size: 0.77rem;
@@ -283,25 +276,71 @@
   <main class="page-shell">
     <header class="page-header">
       <div>
-        <p class="eyebrow">United States · Automated indicators</p>
-        <h1>SDG data cards</h1>
-        <p class="intro">A latest-observation view of the project’s standardized,
-          reproducible indicator outputs. Full historical series remain in the
-          underlying CSV files.</p>
+        <p class="eyebrow">United States · Latest automated observations</p>
+        <h1>U.S. Sustainable Development Goal Indicators</h1>
+        <p class="intro">Automated estimates from publicly accessible data sources.
+          This preview shows the latest observation for each implemented indicator;
+          full historical series remain in the underlying CSV files.</p>
       </div>
-      <div class="header-count" aria-label="11 automated indicators shown">
-        <strong>11</strong>
+      <div class="header-count" aria-label="13 automated indicators shown">
+        <strong>13</strong>
         <span>automated indicators</span>
       </div>
     </header>
 
     <section class="card-grid" aria-label="SDG indicator cards">
 
-      <article class="indicator-card" data-indicator-id="3.4.2"
-               style="--goal-color: #4c9f38">
+      <article class="indicator-card" data-indicator-id="3.1.2"
+               data-sdg-goal="3" data-goal-color="#4C9F38"
+               style="--goal-color: #4C9F38; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 3">
-            <span>SDG</span>
+            <span>Goal</span>
+            <strong>3</strong>
+          </div>
+          <div class="indicator-label">
+            <span>Indicator</span>
+            <strong>3.1.2</strong>
+          </div>
+          <span class="status-badge">Current methodology verified</span>
+        </header>
+
+        <h2>Proportion of births attended by skilled health personnel</h2>
+
+        <div class="metrics">
+
+            <section class="metric" aria-label="Latest observation">
+              <p class="metric-label">Latest observation</p>
+              <p class="metric-value" data-raw-value="98.801907">
+                98.8<span class="metric-suffix">%</span>
+              </p>
+              <p class="metric-unit">percent</p>
+              <p class="metric-context"
+                 data-year="2024"
+                 data-geography="United States"
+                 data-disaggregation="{}">
+                2024 · United States
+              </p>
+            </section>
+        </div>
+
+        <footer class="card-footer">
+          <p><span>Source</span><a href="https://ftp.cdc.gov/pub/Health_Statistics/NCHS/Datasets/DVS/natality/Nat2022us.zip" target="_blank" rel="noreferrer">Centers for Disease Control and Prevention, National Center for Health Statistics</a></p>
+          <p><span>Status</span>Current methodology verified</p>
+
+          <details class="warning">
+            <summary>Methodology / data note</summary>
+            <p>Current NVSS medical-attendant categories 1-4 are included. The broad &#x27;Other Midwife&#x27; category is retained for continuity with the archived U.S. method, but the aggregate source does not independently verify each attendant&#x27;s credentialing. Current final data may revise an older archive vintage.</p>
+          </details>
+        </footer>
+      </article>
+
+      <article class="indicator-card" data-indicator-id="3.4.2"
+               data-sdg-goal="3" data-goal-color="#4C9F38"
+               style="--goal-color: #4C9F38; --goal-ink: #15212b">
+        <header class="card-header">
+          <div class="goal-mark" aria-label="Sustainable Development Goal 3">
+            <span>Goal</span>
             <strong>3</strong>
           </div>
           <div class="indicator-label">
@@ -342,10 +381,11 @@
       </article>
 
       <article class="indicator-card" data-indicator-id="3.6.1"
-               style="--goal-color: #4c9f38">
+               data-sdg-goal="3" data-goal-color="#4C9F38"
+               style="--goal-color: #4C9F38; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 3">
-            <span>SDG</span>
+            <span>Goal</span>
             <strong>3</strong>
           </div>
           <div class="indicator-label">
@@ -385,11 +425,71 @@
         </footer>
       </article>
 
-      <article class="indicator-card" data-indicator-id="3.9.3"
-               style="--goal-color: #4c9f38">
+      <article class="indicator-card" data-indicator-id="3.7.2"
+               data-sdg-goal="3" data-goal-color="#4C9F38"
+               style="--goal-color: #4C9F38; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 3">
-            <span>SDG</span>
+            <span>Goal</span>
+            <strong>3</strong>
+          </div>
+          <div class="indicator-label">
+            <span>Indicator</span>
+            <strong>3.7.2</strong>
+          </div>
+          <span class="status-badge">Current methodology verified</span>
+        </header>
+
+        <h2>Adolescent birth rate (aged 10-14 years; aged 15-19 years) per 1,000 women in that age group</h2>
+
+        <div class="metrics metrics-multiple">
+
+            <section class="metric" aria-label="Ages 15-19">
+              <p class="metric-label">Ages 15-19</p>
+              <p class="metric-value" data-raw-value="12.577634">
+                12.58<span class="metric-suffix"></span>
+              </p>
+              <p class="metric-unit">births per 1,000 women</p>
+              <p class="metric-context"
+                 data-year="2024"
+                 data-geography="United States"
+                 data-disaggregation="{&quot;age&quot;:&quot;15-19&quot;}">
+                2024 · United States
+              </p>
+            </section>
+
+            <section class="metric" aria-label="Ages 10-14">
+              <p class="metric-label">Ages 10-14</p>
+              <p class="metric-value" data-raw-value="0.169314">
+                0.17<span class="metric-suffix"></span>
+              </p>
+              <p class="metric-unit">births per 1,000 women</p>
+              <p class="metric-context"
+                 data-year="2024"
+                 data-geography="United States"
+                 data-disaggregation="{&quot;age&quot;:&quot;10-14&quot;}">
+                2024 · United States
+              </p>
+            </section>
+        </div>
+
+        <footer class="card-footer">
+          <p><span>Source</span><a href="https://ftp.cdc.gov/pub/Health_Statistics/NCHS/Datasets/DVS/natality/Nat2022us.zip" target="_blank" rel="noreferrer">Centers for Disease Control and Prevention, National Center for Health Statistics / U.S. Census Bureau</a></p>
+          <p><span>Status</span>Current methodology verified</p>
+
+          <details class="warning">
+            <summary>Methodology / data note</summary>
+            <p>Final resident live births are divided by the official Census female-population denominator for each maternal-age group. Current final data may revise the older archived vintage; birth counts of 1-9 are suppressed.</p>
+          </details>
+        </footer>
+      </article>
+
+      <article class="indicator-card" data-indicator-id="3.9.3"
+               data-sdg-goal="3" data-goal-color="#4C9F38"
+               style="--goal-color: #4C9F38; --goal-ink: #15212b">
+        <header class="card-header">
+          <div class="goal-mark" aria-label="Sustainable Development Goal 3">
+            <span>Goal</span>
             <strong>3</strong>
           </div>
           <div class="indicator-label">
@@ -430,10 +530,11 @@
       </article>
 
       <article class="indicator-card" data-indicator-id="4.2.2"
-               style="--goal-color: #c5192d">
+               data-sdg-goal="4" data-goal-color="#C5192D"
+               style="--goal-color: #C5192D; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 4">
-            <span>SDG</span>
+            <span>Goal</span>
             <strong>4</strong>
           </div>
           <div class="indicator-label">
@@ -474,10 +575,11 @@
       </article>
 
       <article class="indicator-card" data-indicator-id="8.5.2"
-               style="--goal-color: #a21942">
+               data-sdg-goal="8" data-goal-color="#A21942"
+               style="--goal-color: #A21942; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 8">
-            <span>SDG</span>
+            <span>Goal</span>
             <strong>8</strong>
           </div>
           <div class="indicator-label">
@@ -560,10 +662,11 @@
       </article>
 
       <article class="indicator-card" data-indicator-id="8.6.1"
-               style="--goal-color: #a21942">
+               data-sdg-goal="8" data-goal-color="#A21942"
+               style="--goal-color: #A21942; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 8">
-            <span>SDG</span>
+            <span>Goal</span>
             <strong>8</strong>
           </div>
           <div class="indicator-label">
@@ -604,10 +707,11 @@
       </article>
 
       <article class="indicator-card" data-indicator-id="8.a.1"
-               style="--goal-color: #a21942">
+               data-sdg-goal="8" data-goal-color="#A21942"
+               style="--goal-color: #A21942; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 8">
-            <span>SDG</span>
+            <span>Goal</span>
             <strong>8</strong>
           </div>
           <div class="indicator-label">
@@ -662,10 +766,11 @@
       </article>
 
       <article class="indicator-card" data-indicator-id="10.b.1"
-               style="--goal-color: #dd1367">
+               data-sdg-goal="10" data-goal-color="#DD1367"
+               style="--goal-color: #DD1367; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 10">
-            <span>SDG</span>
+            <span>Goal</span>
             <strong>10</strong>
           </div>
           <div class="indicator-label">
@@ -706,10 +811,11 @@
       </article>
 
       <article class="indicator-card" data-indicator-id="15.a.1"
-               style="--goal-color: #56c02b">
+               data-sdg-goal="15" data-goal-color="#56C02B"
+               style="--goal-color: #56C02B; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 15">
-            <span>SDG</span>
+            <span>Goal</span>
             <strong>15</strong>
           </div>
           <div class="indicator-label">
@@ -750,10 +856,11 @@
       </article>
 
       <article class="indicator-card" data-indicator-id="15.b.1"
-               style="--goal-color: #56c02b">
+               data-sdg-goal="15" data-goal-color="#56C02B"
+               style="--goal-color: #56C02B; --goal-ink: #15212b">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 15">
-            <span>SDG</span>
+            <span>Goal</span>
             <strong>15</strong>
           </div>
           <div class="indicator-label">
@@ -794,10 +901,11 @@
       </article>
 
       <article class="indicator-card" data-indicator-id="17.2.1"
-               style="--goal-color: #19486a">
+               data-sdg-goal="17" data-goal-color="#19486A"
+               style="--goal-color: #19486A; --goal-ink: #ffffff">
         <header class="card-header">
           <div class="goal-mark" aria-label="Sustainable Development Goal 17">
-            <span>SDG</span>
+            <span>Goal</span>
             <strong>17</strong>
           </div>
           <div class="indicator-label">
