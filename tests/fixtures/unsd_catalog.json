@@ -1,0 +1,14 @@
+[
+  {
+    "code": "3.1.2",
+    "series": [
+      {"code": "SH_STA_BRTC", "release": "2026.Q2.G.01"}
+    ]
+  },
+  {
+    "code": "8.6.1",
+    "series": [
+      {"code": "SL_TLF_NEET_19ICLS", "release": "2026.Q2.G.01"}
+    ]
+  }
+]

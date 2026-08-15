@@ -1,0 +1,76 @@
+{
+  "size": 2,
+  "totalElements": 4,
+  "totalPages": 2,
+  "pageNumber": 1,
+  "attributes": [
+    {
+      "id": "Nature",
+      "codes": [
+        {"code": "C", "description": "Country data"}
+      ]
+    },
+    {
+      "id": "Observation Status",
+      "codes": [
+        {"code": "A", "description": "Normal value"}
+      ]
+    },
+    {
+      "id": "Units",
+      "codes": [
+        {"code": "PERCENT", "description": "Percentage"}
+      ]
+    }
+  ],
+  "dimensions": [
+    {
+      "id": "Reporting Type",
+      "codes": [
+        {"code": "G", "description": "Global"}
+      ]
+    },
+    {
+      "id": "Age",
+      "codes": [
+        {"code": "15-24", "description": "15 to 24 years old"}
+      ]
+    },
+    {
+      "id": "Sex",
+      "codes": [
+        {"code": "BOTHSEX", "description": "Both sexes"}
+      ]
+    }
+  ],
+  "data": [
+    {
+      "indicator": ["3.1.2"],
+      "series": "SH_STA_BRTC",
+      "seriesDescription": "Proportion of births attended by skilled health personnel (%)",
+      "geoAreaCode": "840",
+      "geoAreaName": "United States of America",
+      "timePeriodStart": 2022.0,
+      "value": "98.7",
+      "valueType": "Float",
+      "source": "MNCH fixture source",
+      "footnotes": [],
+      "attributes": {"Nature": "C", "Units": "PERCENT", "Observation Status": "A"},
+      "dimensions": {"Reporting Type": "G"}
+    },
+    {
+      "indicator": ["3.1.2"],
+      "series": "SH_STA_BRTC",
+      "seriesDescription": "Proportion of births attended by skilled health personnel (%)",
+      "geoAreaCode": "840",
+      "geoAreaName": "United States of America",
+      "timePeriodStart": 2023.0,
+      "value": "98.8",
+      "valueType": "Float",
+      "source": "MNCH fixture source",
+      "footnotes": ["Fixture country report"],
+      "attributes": {"Nature": "C", "Units": "PERCENT", "Observation Status": "A"},
+      "dimensions": {"Reporting Type": "G"}
+    }
+  ]
+}
